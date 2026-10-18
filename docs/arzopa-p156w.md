@@ -5,8 +5,10 @@ ADB. Observations are kept separate from guesses. Unique identifiers (serial, MA
 out.
 
 **Result:** ADB over USB after accepting the frame's own authorization, and a shipped SuperSU
-`su` that gives root with no prompt. A verified backup of everything before `userdata` (2.76 GiB)
-was taken over ADB; **no flash partition was written**. The stock WebView is
+`su` that gives root with no prompt. ADB over Wi-Fi was turned on later from that USB session (see
+[ADB over Wi-Fi](#adb-over-wi-fi)), on 2026-10-18 from the same Linux host. A verified backup of
+everything before `userdata` (2.76 GiB) was taken over ADB; **no flash partition was written**. The
+stock WebView is
 `61.0.3163.98`, which is too old for this repo's dashboard (see
 [Dashboard compatibility](#dashboard-compatibility)).
 
@@ -118,6 +120,82 @@ installed on this frame can take root**, so install nothing untrusted.
 
 `ro.adb.secure=1`, and SystemUI is present and enabled (only `com.android.nfc` is disabled), so an
 authorization dialog does have somewhere to appear.
+
+### ADB over Wi-Fi
+
+`adbd` is USB-only out of the box on this build: nothing is bound to 5555, and no `persist.*`
+property switches it on by itself. Turning TCP on for the current boot needs **no root** — `adb
+tcpip` sets `service.adb.tcp.port` and restarts `adbd`:
+
+```sh
+adb -s <usb-transport> tcpip 5555       # "restarting in TCP mode port: 5555"
+adb connect <frame-ip>:5555
+adb devices -l                          # the same serial now appears again as <ip>:5555
+```
+
+The network transport reuses `/data/misc/adb/adb_keys`, so **no second authorization dialog
+appears** and `su` works over it unchanged:
+
+```text
+$ adb -s <ip>:5555 shell su -c id
+uid=0(root) gid=0(root) groups=0(root) context=u:r:toolbox:s0
+```
+
+#### Surviving a reboot: the ROM's own switch (verified)
+
+The BSP ships the intended persistent switch, in `/init.rk30board.rc`:
+
+```text
+# for Internet adb
+on property:persist.internet.adb.enable=1
+    setprop service.adb.tcp.port 5555
+    restart adbd
+on property:persist.internet.adb.enable=0
+    setprop service.adb.tcp.port 0
+    restart adbd
+```
+
+So the persistent form is that property, not `persist.adb.tcp.port`:
+
+```sh
+adb shell su -c 'setprop persist.internet.adb.enable 1'
+```
+
+`persist.adb.tcp.port` is **not** read on this build: nothing maps it to `service.adb.tcp.port`,
+which is the only property `adbd` itself looks at, so setting it does nothing. The trigger above is
+the whole mechanism, and it fires at each boot because the value is persisted in `/data/property/`.
+The ROM also declares the property (`persist.internet.adb.enable u:object_r:system_prop:s0` in
+`/vendor/etc/selinux/nonplat_property_contexts`), so a tool that goes through it is expected, even
+though nothing in `Settings` exposes the switch.
+
+**Verified 2026-10-18 by rebooting with the USB cable out.** After `adb reboot` the frame came back
+on its own Wi-Fi with `service.adb.tcp.port=5555` set, port 5555 listening, and `su -c id` returning
+root over TCP alone — no USB session to re-enable it.
+
+Two things to expect after a reboot:
+
+- **The address can change.** The DHCP lease moved this frame from one `10.8.0.x` to another across
+  that reboot, so a saved `adb connect` target goes stale. `adb mdns services` finds it without
+  knowing the address; the frame advertises itself as soon as `adbd` is up:
+
+  ```text
+  $ adb mdns services
+  adb-<serial>   _adb._tcp   10.8.0.x:5555
+  ```
+
+- **`adbd` restart drops the current session.** Setting the property restarts `adbd` at once, so the
+  TCP connection in use has to be re-established (`adb disconnect <ip>:5555; adb connect <ip>:5555`).
+
+Undo with the ROM's own branch — it clears the port and restarts `adbd`:
+
+```sh
+adb shell su -c 'setprop persist.internet.adb.enable 0'
+```
+
+`adb usb` alone only returns the *current* boot to USB; the property still applies at the next one.
+`ro.adb.secure=1` continues to apply over TCP, so only a host whose key is already in
+`/data/misc/adb/adb_keys` can attach, and a new host still needs the on-screen prompt. The port is
+not open to anything else on the LAN.
 
 ## Partition table (eMMC `mmcblk2`, 512-byte sectors)
 
@@ -475,7 +553,7 @@ which is why the WebView/modern-engine route above is the way to keep the dashbo
 | 4 Back up | Done and verified over ADB, before `userdata`. Restore path untested. |
 | 5 Root | Shipped `su` works with no prompt. |
 | 6 Make it useful | **Partly.** A current WebView is in place through the vendor overlay route, and the dashboard renders on it. The kiosk app itself has not been built or installed on this unit. |
-| 7 Networking | Onboard Wi-Fi works. Port 5555 was closed; no network ADB. |
+| 7 Networking | Onboard Wi-Fi works. Network ADB enabled over TCP on the frame's own Wi-Fi — see [ADB over Wi-Fi](#adb-over-wi-fi). |
 | 8 Vendor updates | Done: `com.adups.fota` and `android.rockchip.update.service` are disabled (see [Changes made](#changes-made-to-the-frame)), and their endpoints are recorded under [Update checks](#update-checks-the-urls-behind-each-updater). Note that Frameo had **already replaced its own version**: the running copy was v1.32.16 in `/data/app`, not the `/system/priv-app/Frameo` copy; Frameo itself is disabled too now — see [the later note](#changes-made-to-the-frame). |
 | 9 Security hand-off | Pending. |
 
@@ -500,6 +578,7 @@ with the frame's own package manager.
 | Rockchip updater off (`android.rockchip.update.service` v1.8.1, `INTERNET` granted, service live against `www.rockchip.com:2300`) | `pm disable-user --user 0 android.rockchip.update.service` | `pm default-state --user 0 android.rockchip.update.service` |
 | Firefox 143.0.4 `armeabi-v7a` installed, then removed again, to check what the dashboard looks like on a current engine | `adb install -r fenix-143.0.4.multi.android-armeabi-v7a.apk` (SHA-256 `af560738…3829f8`, the pin in `scripts/biuframe-setup.sh`) | `adb uninstall org.mozilla.firefox` |
 | Mulch SystemWebView 131.0.6778.200 added as a **second** WebView provider (`us.spotco.mulch_wv`), selected as the implementation | see [A modern WebView without touching `/system`](#a-modern-webview-without-touching-system-verified) | `cmd webviewupdate set-webview-implementation com.android.webview`, remove the overlay, reboot, `adb uninstall us.spotco.mulch_wv` |
+| Wireless ADB turned on and made persistent with the BSP's own switch (`persist.internet.adb.enable=1`), so `adbd` also listens on TCP 5555 at each boot | `adb tcpip 5555` for the current boot, then `setprop persist.internet.adb.enable 1` — see [ADB over Wi-Fi](#adb-over-wi-fi) | `adb shell su -c 'setprop persist.internet.adb.enable 0'` |
 
 On the stock WebView (61) the same page loads but is visibly wrong; Firefox 143 renders it
 correctly and is the reference for what the dashboard should look like at 1920×1080. See
