@@ -734,7 +734,7 @@ advertised interfaces:
 | AW. ambient temperature | Type 13 advertised; no samples or active client. | A working ambient sensor. |
 | SoC thermal | `sunxi-therm` reports raw 43 in thermal and hwmon nodes. | Scaling and calibration; distinct from ambient temperature. |
 | Silead touch | `gslX680new` at I2C `0-0040`; multitouch advertised. Taps and swipes worked. | Reliable close two-finger gestures. |
-| Audio | `SUNXI-CODEC` exposes playback/capture; speaker playback works. | Fitted microphone or working capture. |
+| Audio | `SUNXI-CODEC` exposes playback/capture; speaker playback works. On a `20260519` unit a speaker tone did not reach capture on any codec path ([report](pf1007l-aimor-20260519-windows-adb-on-report.md#microphone)). | A fitted microphone. |
 | Camera | Camera HAL present; camera service reports zero devices. | Physical inspection. |
 | Bluetooth | Feature flags present; no sysfs/rfkill controller, Bluetooth app or connected framework service. | Working Android stack or fitted radio; Linux BLE support is reported below on a different unit (the Omarchy SD build). |
 | Power | USB online. Battery node reports present/charging with zero voltage/capacity. Reconnecting USB power caused a cold boot. | A usable battery. |

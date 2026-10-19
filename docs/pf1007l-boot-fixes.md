@@ -46,7 +46,8 @@ October 2026, on a 2 A wall supply:
   in more than 60 later boots. Its cause is unknown.
 - Observed on other units, one or a few boots each: `check`, `apply` and `verify` passed on January
   `20260113` (#137, #164, #172, #179) and April `20260416`
-  ([report](pf1007l-macos-20260416-report.md#boot-fixes)), with `WIFI_DEFER=1` and `POWER_FIX=0`.
+  ([report](pf1007l-macos-20260416-report.md#boot-fixes)), and May `20260519` from Windows Git Bash
+  ([report](pf1007l-aimor-20260519-windows-adb-on-report.md#setup-that-worked)), with `WIFI_DEFER=1` and `POWER_FIX=0`.
   Wi-Fi started at 39.9 to 44 s uptime. Repeated and power-cut boots were not tested on most of them.
 - Observed before the fixes, the same freeze on other units: a January unit went dark about 30 s
   into a boot from a laptop port (#137); a January unit on a 5 W USB-A charger stayed black after
