@@ -11,6 +11,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
@@ -47,6 +48,7 @@ import java.util.Map;
  * Full-screen kiosk WebView for the Home HQ wall tablet.
  * - Immersive mode hides the status + navigation bars (true 1280x800).
  * - Controls: hold two fingers still on the screen for 1.5s for launcher/settings/Wi-Fi/reload.
+ *   Optional single-tap Menu button: launch with --ez menu_button true (false removes it).
  * - Offline: a failed page load shows a native screen instead of WebView's error page (which
  *   prints the full URL, including any token in it). With no Wi-Fi it offers Wi-Fi settings.
  * - Remote debugging is OFF unless launched with the debug extra (every app on this device
@@ -65,6 +67,7 @@ public class MainActivity extends Activity {
   static final String DEFAULT_URL = "https://home-dashboard.wesbos.workers.dev/";
   static final String PREFS = "kiosk";
   static final String PREF_URL = "url";
+  static final String PREF_MENU_BUTTON = "menu_button";
   static final long EXIT_HOLD_MS = 1500;
   static final int CANCEL_POINTER_IDS = 10; // touch ids 0-9
   static final long RETRY_MS = 5000;
@@ -77,6 +80,7 @@ public class MainActivity extends Activity {
   static final String LOCAL_ASSETS = "site";
 
   private WebView web;
+  private Button menuButton;
   private final Handler handler = new Handler(Looper.getMainLooper());
   // Not cleared in onDestroy, so a navigation rebind that has started always finishes.
   private final Handler rebindHandler = new Handler(Looper.getMainLooper());
@@ -133,7 +137,8 @@ public class MainActivity extends Activity {
     @Override
     public void run() {
       exitArmed = false;
-      Log.i(TAG, "Two-finger hold: opening controls");
+      handler.removeCallbacks(showControls);
+      Log.i(TAG, "Opening kiosk controls");
       cancelPageTouches();
       new AlertDialog.Builder(MainActivity.this)
           .setTitle("Home HQ")
@@ -235,6 +240,24 @@ public class MainActivity extends Activity {
     FrameLayout root = new FrameLayout(this);
     root.addView(web);
     root.addView(buildOffline());
+    menuButton = new Button(this);
+    menuButton.setText("Menu");
+    menuButton.setAllCaps(false);
+    menuButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+    menuButton.setTextColor(Color.WHITE);
+    menuButton.setContentDescription("Open kiosk controls");
+    menuButton.setPadding(0, 0, 0, 0);
+    GradientDrawable menuBackground = new GradientDrawable();
+    menuBackground.setColor(Color.argb(220, 35, 35, 35));
+    menuBackground.setCornerRadius(dp(10));
+    menuBackground.setStroke(dp(1), Color.rgb(90, 90, 90));
+    menuButton.setBackground(menuBackground);
+    menuButton.setOnClickListener(v -> showControls.run());
+    FrameLayout.LayoutParams menuPosition = new FrameLayout.LayoutParams(
+        dp(72), dp(48), Gravity.BOTTOM | Gravity.LEFT);
+    menuPosition.setMargins(dp(12), dp(12), dp(12), dp(12));
+    root.addView(menuButton, menuPosition);
+    applyMenuButtonFlag(getIntent());
     setContentView(root);
 
     String url = urlFrom(getIntent());
@@ -264,6 +287,7 @@ public class MainActivity extends Activity {
     setIntent(intent);
     applyDebugFlag(intent);
     applyHomeFlag(intent);
+    applyMenuButtonFlag(intent);
     String url = urlFrom(intent);
     if (url != null) {
       handler.removeCallbacks(retry);
@@ -520,6 +544,16 @@ public class MainActivity extends Activity {
     boolean debug = intent != null && intent.getBooleanExtra("debug", false);
     WebView.setWebContentsDebuggingEnabled(debug);
     Log.i(TAG, "WebView remote debugging " + (debug ? "ON" : "off"));
+  }
+
+  /** A saved opt-in for panels where the two-finger gesture is unreliable. */
+  private void applyMenuButtonFlag(Intent intent) {
+    if (intent != null && intent.hasExtra(PREF_MENU_BUTTON)) {
+      getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+          .putBoolean(PREF_MENU_BUTTON, intent.getBooleanExtra(PREF_MENU_BUTTON, false)).apply();
+    }
+    menuButton.setVisibility(getSharedPreferences(PREFS, MODE_PRIVATE)
+        .getBoolean(PREF_MENU_BUTTON, false) ? View.VISIBLE : View.GONE);
   }
 
   /** Turns the Home alias on or off. The shell can't enable a component of a release app. */
