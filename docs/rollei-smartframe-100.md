@@ -1,7 +1,9 @@
 # Rollei Smart Frame WiFi 100 (10.1" Frameo, RK3126, Android 6.0.1)
 
-Record of one unit (white), started 2026-10-19, macOS host. Observations are kept separate from
-guesses. Unique identifiers (serial, MAC, IP) are left out. Where it was bought was not recorded.
+Record of one unit (white), bought from [Amazon Italy](https://www.amazon.it/dp/B0B9SNSWDY)
+(listed as "Rollei Smart Frame WiFi 100", 10.1", 32 GB, 1280x800, Frameo), started 2026-10-19,
+macOS host. Observations are kept separate from guesses. Unique identifiers (serial, MAC, IP) are
+left out. The listing predates this firmware (2025-11), so other units from it may ship a different build.
 
 A sibling of the [Rollei Smart Frame 107](rollei-smartframe-107.md): same vendor build family
 (Harmony / ZhiHeXing, `F6010T`), an older board revision (`1001` instead of `1010`) and firmware
