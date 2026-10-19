@@ -191,7 +191,8 @@ python3 kiosk/test-navigation.py
 Run from `dashboard/`. The test compiles the actual repair method with settings and
 permission fakes; it does not prove service binding or reboot behavior on Android.
 
-Use JDK 17, Android build-tools 34.0.0, and platform 34. From `dashboard/`:
+Use JDK 17, Android build-tools 34.0.0, and platform 34. On Ubuntu 24.04, the apt packages listed
+at the top of `build.sh` install all three, with `ANDROID_HOME=/usr/lib/android-sdk`. From `dashboard/`:
 
 ```sh
 ANDROID_HOME=/path/to/android-sdk bash kiosk/build.sh
