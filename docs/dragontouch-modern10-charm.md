@@ -312,19 +312,6 @@ A 65,536-byte read of `/dev/block/by-name/boot` contained 552 `0x0a` bytes and w
 65,536 bytes, so this Windows `adb` did not expand newlines. The first eight bytes were
 `ANDROID!`.
 
-### Firefox shortcut wording
-
-Firefox 143.0.4 ARMv7, the build pinned above. While the page had no installable manifest, the
-menu item was **Add to Home screen**. The shortcut intent used category
-`mozilla.components.pwa.category.SHORTCUT`, and opening it resumed
-`org.mozilla.firefox/org.mozilla.fenix.HomeActivity` with the toolbar visible.
-
-After the page linked a manifest with `"display": "fullscreen"`, `"orientation": "landscape"`,
-and PNG icons at 192 and 512, the menu item was **Add app to Home screen**. Opening that
-shortcut from a stopped Firefox started
-`org.mozilla.firefox/org.mozilla.fenix.customtabs.ExternalAppBrowserActivity`. The toolbar was
-absent, and the page content began at the top of the 1280x800 frame.
-
 ### Clock
 
 About 28 minutes after boot, `uptime` reported idle time longer than uptime, the tell from the
