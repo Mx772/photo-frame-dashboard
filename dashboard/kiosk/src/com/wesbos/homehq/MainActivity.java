@@ -39,6 +39,8 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -59,6 +61,8 @@ import java.util.Map;
  * - Offer the kiosk as a Home app (--ez home false undoes it), then pick it:
  *     adb shell am start -n com.wesbos.homehq/.MainActivity --ez home true
  *     adb shell cmd package set-home-activity com.wesbos.homehq/.Home
+ * - Wi-Fi with a sign-in page (captive portal): when the dashboard can't load on Wi-Fi, the kiosk
+ *   checks for one and shows it, so the terms can be accepted; then it returns to the dashboard.
  */
 public class MainActivity extends Activity {
   static final String TAG = "HomeHQ";
@@ -75,6 +79,12 @@ public class MainActivity extends Activity {
   static final String LOCAL_HOST = "127.0.0.1";
   static final int LOCAL_PORT = 8765;
   static final String LOCAL_ASSETS = "site";
+  // Android's own captive portal check: 204 when online, anything else when a portal answers.
+  // Plain HTTP so a portal can redirect it, and so it works before the clock is set.
+  static final String PORTAL_PROBE = "http://connectivitycheck.gstatic.com/generate_204";
+  static final int PROBE_TIMEOUT_MS = 10000;
+  static final long PORTAL_CHECK_MS = 5000;
+  static final int PROBE_ONLINE = 0, PROBE_PORTAL = 1, PROBE_FAILED = 2;
 
   private WebView web;
   private final Handler handler = new Handler(Looper.getMainLooper());
@@ -91,6 +101,11 @@ public class MainActivity extends Activity {
   private boolean retryPending;
   private LinearLayout offline;
   private TextView offlineTitle, offlineText;
+  private Button signIn;
+  // Captive portal: found by the last probe, on screen, closed by the owner, or its page failed.
+  private boolean probing, portalFound, portalMode, portalDismissed, portalFailed;
+  private LinearLayout portalBar;
+  private TextView portalText;
 
   private final Runnable retry = new Runnable() {
     @Override
@@ -128,6 +143,9 @@ public class MainActivity extends Activity {
       handler.post(retry);
     }
   };
+
+  // While the sign-in page is up, check every few seconds whether the frame is online yet.
+  private final Runnable portalCheck = this::checkPortal;
 
   private final Runnable showControls = new Runnable() {
     @Override
@@ -195,6 +213,12 @@ public class MainActivity extends Activity {
       @Override
       @SuppressWarnings("deprecation")
       public void onReceivedError(WebView view, int code, String desc, String failingUrl) {
+        if (portalMode) {
+          // The sign-in page itself didn't load; the next portal check loads it again.
+          Log.w(TAG, "Wi-Fi sign-in page failed (" + desc + ")");
+          portalFailed = true;
+          return;
+        }
         Log.w(TAG, "Load failed (" + desc + "), retrying in " + RETRY_MS + " ms");
         pageFailed = true;
         showOffline();
@@ -217,6 +241,12 @@ public class MainActivity extends Activity {
           Log.w(TAG, "Certificate error " + error.getPrimaryError() + " on a subresource; blocked");
           return;
         }
+        if (portalMode) {
+          Log.w(TAG, "Certificate error " + error.getPrimaryError() + " on the Wi-Fi sign-in page");
+          portalFailed = true;
+          portalText.setText("This Wi-Fi's sign-in page has a certificate problem. Trying again\u2026");
+          return;
+        }
         Log.w(TAG, "Certificate error " + error.getPrimaryError() + ", retrying in " + RETRY_MS + " ms");
         pageFailed = true;
         showOffline();
@@ -232,8 +262,12 @@ public class MainActivity extends Activity {
         handler.postDelayed(retry, RETRY_MS);
       }
     });
+    LinearLayout column = new LinearLayout(this);
+    column.setOrientation(LinearLayout.VERTICAL);
+    column.addView(buildPortalBar());
+    column.addView(web, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1));
     FrameLayout root = new FrameLayout(this);
-    root.addView(web);
+    root.addView(column);
     root.addView(buildOffline());
     setContentView(root);
 
@@ -266,6 +300,7 @@ public class MainActivity extends Activity {
     applyHomeFlag(intent);
     String url = urlFrom(intent);
     if (url != null) {
+      closePortal();
       handler.removeCallbacks(retry);
       handler.removeCallbacks(stall);
       retryPending = false;
@@ -386,7 +421,134 @@ public class MainActivity extends Activity {
     wifi.setOnClickListener(v -> openWifiSettings());
     offline.addView(wifi, new LinearLayout.LayoutParams(
         LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+    signIn = new Button(this);
+    signIn.setText("Sign in to Wi-Fi");
+    signIn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
+    signIn.setPadding(dp(32), dp(16), dp(32), dp(16));
+    signIn.setVisibility(View.GONE);
+    signIn.setOnClickListener(v -> openPortal());
+    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+        LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+    lp.topMargin = dp(16);
+    offline.addView(signIn, lp);
     return offline;
+  }
+
+  /** The strip above the Wi-Fi sign-in page. */
+  private View buildPortalBar() {
+    portalBar = new LinearLayout(this);
+    portalBar.setOrientation(LinearLayout.HORIZONTAL);
+    portalBar.setGravity(Gravity.CENTER_VERTICAL);
+    portalBar.setBackgroundColor(Color.rgb(17, 17, 17));
+    portalBar.setPadding(dp(16), dp(8), dp(8), dp(8));
+    portalBar.setVisibility(View.GONE);
+
+    portalText = new TextView(this);
+    portalText.setTextColor(Color.WHITE);
+    portalText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+    portalBar.addView(portalText, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+
+    Button cancel = new Button(this);
+    cancel.setText("Cancel");
+    cancel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+    cancel.setOnClickListener(v -> {
+      portalDismissed = true;
+      leavePortal();
+    });
+    portalBar.addView(cancel);
+    return portalBar;
+  }
+
+  /** Probes PORTAL_PROBE off the main thread; the result goes to onProbe. One probe at a time. */
+  private void checkPortal() {
+    if (probing) return;
+    probing = true;
+    new Thread(() -> {
+      int result = probePortal();
+      handler.post(() -> {
+        probing = false;
+        if (!isDestroyed()) onProbe(result);
+      });
+    }, "portal-probe").start();
+  }
+
+  /** Runs on a background thread. Redirects are not followed, so a portal's redirect counts as a portal. */
+  static int probePortal() {
+    HttpURLConnection c = null;
+    try {
+      c = (HttpURLConnection) new URL(PORTAL_PROBE).openConnection();
+      c.setInstanceFollowRedirects(false);
+      c.setUseCaches(false);
+      c.setConnectTimeout(PROBE_TIMEOUT_MS);
+      c.setReadTimeout(PROBE_TIMEOUT_MS);
+      int code = c.getResponseCode();
+      // Like Android: an empty 200 (some proxies send it for 204) also means online.
+      if (code == 204 || (code == 200 && c.getContentLength() == 0)) return PROBE_ONLINE;
+      if (code >= 200 && code < 400) {
+        Log.i(TAG, "Wi-Fi sign-in page found (probe answered " + code + ")");
+        return PROBE_PORTAL;
+      }
+      return PROBE_FAILED;
+    } catch (IOException e) {
+      return PROBE_FAILED;
+    } finally {
+      if (c != null) c.disconnect();
+    }
+  }
+
+  private void onProbe(int result) {
+    if (portalMode) {
+      if (result == PROBE_ONLINE || !wifiConnected()) {
+        Log.i(TAG, result == PROBE_ONLINE ? "Signed in to Wi-Fi, back to the dashboard" : "Wi-Fi dropped during sign-in");
+        portalFound = false;
+        leavePortal();
+        return;
+      }
+      if (portalFailed && result == PROBE_PORTAL) {
+        portalFailed = false;
+        load(PORTAL_PROBE);
+      }
+      handler.postDelayed(portalCheck, PORTAL_CHECK_MS);
+      return;
+    }
+    portalFound = result == PROBE_PORTAL;
+    if (!portalFound || offline.getVisibility() != View.VISIBLE) return;
+    if (portalDismissed) setOfflineText(); // offers the Sign in button instead
+    else openPortal();
+  }
+
+  /**
+   * Shows the network's sign-in page in place of the dashboard. Loading the probe URL lets the
+   * portal redirect to its own page, as Android's sign-in app does.
+   */
+  private void openPortal() {
+    portalMode = true;
+    portalDismissed = false;
+    portalFailed = false;
+    handler.removeCallbacks(retry);
+    handler.removeCallbacks(stall);
+    handler.removeCallbacks(portalCheck);
+    retryPending = false;
+    if (retryUrl == null) retryUrl = savedUrl();
+    portalText.setText("This Wi-Fi needs you to accept its terms. The dashboard comes back once the frame is online.");
+    portalBar.setVisibility(View.VISIBLE);
+    offline.setVisibility(View.GONE);
+    load(PORTAL_PROBE);
+    handler.postDelayed(portalCheck, PORTAL_CHECK_MS);
+  }
+
+  /** Closes the sign-in page and loads the dashboard again. */
+  private void leavePortal() {
+    closePortal();
+    load(retryUrl != null ? retryUrl : savedUrl());
+  }
+
+  private void closePortal() {
+    if (!portalMode) return;
+    portalMode = false;
+    handler.removeCallbacks(portalCheck);
+    portalBar.setVisibility(View.GONE);
   }
 
   private boolean wifiConnected() {
@@ -397,14 +559,32 @@ public class MainActivity extends Activity {
   }
 
   private void showOffline() {
-    if (wifiConnected()) {
+    boolean wifi = setOfflineText();
+    offline.setVisibility(View.VISIBLE);
+    // On Wi-Fi, a sign-in page may be what's blocking the dashboard.
+    if (wifi) checkPortal();
+  }
+
+  /** Fills in the offline screen for the current state; returns whether Wi-Fi is connected. */
+  private boolean setOfflineText() {
+    boolean wifi = wifiConnected();
+    if (!wifi) {
+      // A new network gets its sign-in page opened again, even if the last one was closed.
+      portalFound = false;
+      portalDismissed = false;
+    }
+    signIn.setVisibility(wifi && portalFound ? View.VISIBLE : View.GONE);
+    if (wifi && portalFound) {
+      offlineTitle.setText("Sign in to Wi-Fi");
+      offlineText.setText("This Wi-Fi shows a page where you accept its terms before the frame can go online.");
+    } else if (wifi) {
       offlineTitle.setText("Can't reach the dashboard");
       offlineText.setText("Wi-Fi is connected. Retrying every few seconds.");
     } else {
       offlineTitle.setText("Connect to Wi-Fi?");
       offlineText.setText("The frame isn't on Wi-Fi. The dashboard comes back by itself once it is.");
     }
-    offline.setVisibility(View.VISIBLE);
+    return wifi;
   }
 
   private void openWifiSettings() {

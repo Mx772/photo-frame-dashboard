@@ -152,6 +152,13 @@ screen. The error page would print the full URL, including any token in it.
 
 - **No Wi-Fi:** "Connect to Wi-Fi?" with an **Open Wi-Fi settings** button.
 - **Wi-Fi is up but the dashboard is unreachable:** "Can't reach the dashboard".
+- **Wi-Fi has a sign-in page** (a captive portal, as on school, hotel and guest networks): the
+  kiosk checks `http://connectivitycheck.gstatic.com/generate_204` the way Android does. Anything
+  but a 204 means a portal, and the kiosk opens its page with a bar above it, so the terms can be
+  accepted on the frame. It checks again every 5 seconds and returns to the dashboard once the
+  frame is online. **Cancel** closes the page; the offline screen then offers **Sign in to Wi-Fi**
+  until the frame joins a network again. Frames with SystemUI disabled never see Android's own
+  "Sign in to network" notification, so this is the only way to reach the page.
 
 - **Certificate error:** never bypassed. If the error is about the date, the screen says
   "Setting the clock…". Frames with no clock battery start with an old date after a power cut
