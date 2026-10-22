@@ -12,6 +12,12 @@ Everything else (kernel, header fields, other cpio entries) stays byte-identical
 the output is padded to the original image size. Run with `python -I`.
 
   python -I scripts/a33-sdboot/patch-boot.py --pubkey ~/.android/adbkey.pub --out DIR
+
+Other boards with p6 at the same sector (the SOMY/Pastigio ZC002 family, M10R7): first print
+that board's boot image length and SHA-256, then pass both:
+
+  python -I scripts/a33-sdboot/patch-boot.py --inspect
+  python -I scripts/a33-sdboot/patch-boot.py --pubkey ... --out DIR --boot-len N --expect-sha256 H
 """
 import argparse
 import gzip
@@ -36,14 +42,14 @@ def sha256(b):
     return hashlib.sha256(b).hexdigest()
 
 
-def read_boot(dump):
+def read_boot(dump, boot_len):
     sums = {}
     for line in (dump / "SHA256SUMS").read_text().splitlines():
         parts = line.split()
         if len(parts) == 2:
             sums[parts[1].lstrip("*")] = parts[0]
     start = BOOT_START_SECTOR * SECTOR
-    first, last = start // CHUNK, (start + BOOT_LEN - 1) // CHUNK
+    first, last = start // CHUNK, (start + boot_len - 1) // CHUNK
     buf = b""
     for i in range(first, last + 1):
         name = f"emmc-{i:02x}.bin"
@@ -54,7 +60,7 @@ def read_boot(dump):
             die(f"{name} does not match SHA256SUMS")
         buf += data
     off = start - first * CHUNK
-    return buf[off:off + BOOT_LEN]
+    return buf[off:off + boot_len]
 
 
 def parse_header(img):
@@ -162,24 +168,52 @@ def patch_ramdisk(raw, key_line):
     return out, dpmode
 
 
+def inspect(dump):
+    """Length and hash of the Android boot image at p6, read from its own header."""
+    head = read_boot(dump, 4096)
+    h = parse_header(head)
+    koff, roff, soff, doff, up = layout(h)
+    n = h["page"] + up(h["ksz"]) + up(h["rsz"]) + up(h["ssz"]) + up(h["dtsz"])
+    img = read_boot(dump, n)
+    ok = boot_id(img, h, img[roff:roff + h["rsz"]]) == img[0x240:0x260]
+    print(f"boot image at sector {BOOT_START_SECTOR}: page {h['page']}, kernel {h['ksz']}, ramdisk {h['rsz']}")
+    print(f"--boot-len {n} --expect-sha256 {sha256(img)}")
+    print(f"header boot id matches: {ok}")
+    if h["ssz"] or h["dtsz"]:
+        print("this image has second/dt sections: this builder can't patch it")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dump", default=str(ROOT / "backups" / "pf1007-emmc"))
-    ap.add_argument("--pubkey", required=True)
-    ap.add_argument("--out", required=True)
+    ap.add_argument("--pubkey")
+    ap.add_argument("--out")
+    ap.add_argument("--inspect", action="store_true",
+                    help="only print the boot image's length and SHA-256 from the dump, then exit")
+    ap.add_argument("--boot-len", type=int, default=BOOT_LEN,
+                    help="length of the original boot image in bytes (default: the PF1007L's)")
+    ap.add_argument("--expect-sha256",
+                    help="stop unless the original boot image has this SHA-256")
     a = ap.parse_args()
+    if a.inspect:
+        return inspect(Path(a.dump))
+    if not (a.pubkey and a.out):
+        ap.error("--pubkey and --out are required (or use --inspect)")
+    boot_len = a.boot_len
 
     key = Path(a.pubkey).expanduser().read_text().strip().replace("\r", "")
     if "\n" in key or len(key.split(" ")[0]) < 600:
         die("pubkey must be a single adbkey.pub line")
     key_line = key + "\n"
 
-    img = read_boot(Path(a.dump))
+    img = read_boot(Path(a.dump), boot_len)
+    if a.expect_sha256 and sha256(img) != a.expect_sha256.lower():
+        die(f"p6 in the dump is {sha256(img)}, not the expected {a.expect_sha256}")
     h = parse_header(img)
     koff, roff, soff, doff, up = layout(h)
     if h["ssz"] or h["dtsz"]:
         die("image has second/dt sections; this builder assumes none")
-    if up(h["ksz"]) + up(h["rsz"]) + h["page"] != BOOT_LEN:
+    if up(h["ksz"]) + up(h["rsz"]) + h["page"] != boot_len:
         die("header sizes do not add up to the expected image length")
     rd_gz = img[roff:roff + h["rsz"]]
     if boot_id(img, h, rd_gz) != img[0x240:0x260]:
@@ -196,7 +230,7 @@ def main():
     struct.pack_into("<I", new, 16, len(new_gz))  # ramdisk_size
     new[0x240:0x260] = boot_id(bytes(new), dict(h, rsz=len(new_gz)), new_gz)
     new = bytes(new)
-    if len(new) != BOOT_LEN:
+    if len(new) != boot_len:
         die("size changed")
 
     out = Path(a.out)

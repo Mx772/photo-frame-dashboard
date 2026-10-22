@@ -25,6 +25,33 @@ The scripts stop if the boot partition is not the tested one.
 `build-write.sh` refuses a boot image with a SHA-256 other than
 `d71c313ddaa4693948acb20af7740ccb56c88bf9376746a47fce2d00c14fc6a4`.
 
+### Other boards with the boot partition at sector 172032
+
+The same scripts have been used on a [SOMY M10R7](somy-m10r7.md), whose p6 also starts at sector
+172032 but holds a different boot image. Two options make that possible without editing the
+scripts. Everything else in this guide is unchanged.
+
+1. **4-bit eMMC.** If the dump reports `emmc_dev: ok` but `st_00=FAIL first read`, rebuild with
+   the eMMC at 4-bit, 26 MHz: `A33_EMMC_4BIT=1 bash scripts/a33-sdboot/build-macos.sh` (or the same
+   variable with `build.sh`). On macOS, run `card-macos.py clean` **before** rebuilding, because it
+   only recognises the build that is on the card; then delete `a33.scr` and `a33-status.txt` from
+   the card and run `prepare` again.
+2. **Your boot image's length and hash.** After a verified dump, print them:
+
+   ```sh
+   python -I scripts/a33-sdboot/patch-boot.py --inspect
+   ```
+
+   Pass the two values it prints to `patch-boot.py` (`--boot-len N --expect-sha256 H`), and set
+   them for the write scripts as `BOOT_LEN=N BOOT_SHA256=H` in front of
+   `bash scripts/a33-sdboot/build-macos.sh apply` (and `restore`). Every guard still applies: the
+   write happens only if p6 hashes to `H`, and the report must show the kernel and header checks
+   as `True`.
+
+The patch assumes `/default.prop` and `/init.rc` in the ramdisk and no second/dt sections;
+`patch-boot.py` stops if that is not so. Don't use these options to point the write at a
+different sector: the start sector is fixed in `boot-write.cmd.in`.
+
 ## 2. What the patch changes
 
 The patch changes only the ramdisk in the boot partition (eMMC p6).

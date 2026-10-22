@@ -31,6 +31,7 @@ case "$MODE" in
         docker build -t frame-a33-sdboot-build -f "$HERE/Dockerfile" "$HERE"
         "${RUN[@]}" \
             -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/src \
+            -e A33_EMMC_4BIT \
             --mount "type=bind,src=$SOURCE,dst=/src,readonly" \
             --mount "type=bind,src=$OUT,dst=/repo/diagnostics/a33-sdboot" \
             frame-a33-sdboot-build \
@@ -40,7 +41,7 @@ case "$MODE" in
             }
         ;;
     apply|restore)
-        "${RUN[@]}" \
+        "${RUN[@]}" -e BOOT_LEN -e BOOT_SHA256 \
             --mount "type=bind,src=$OUT,dst=/repo/diagnostics/a33-sdboot,readonly" \
             --mount "type=bind,src=$PATCHED,dst=/repo/diagnostics/pf1007/patched" \
             frame-a33-sdboot-build bash /repo/scripts/a33-sdboot/build-write.sh "$MODE"

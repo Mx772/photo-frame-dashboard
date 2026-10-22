@@ -14,7 +14,12 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 P="$ROOT/diagnostics/pf1007/patched"
 MKIMAGE="$ROOT/diagnostics/a33-sdboot/build/tools/mkimage"
-LEN=15886336
+# The PF1007L's boot image. For another board with p6 at the same sector, set BOOT_LEN and
+# BOOT_SHA256 to that board's original image (the values patch-boot.py was given).
+LEN="${BOOT_LEN:-15886336}"
+ORIG_SHA="${BOOT_SHA256:-d71c313ddaa4693948acb20af7740ccb56c88bf9376746a47fce2d00c14fc6a4}"
+[[ "$LEN" =~ ^[0-9]+$ ]] && [ $((LEN % 512)) = 0 ] || { echo "FAIL: BOOT_LEN must be a whole number of 512-byte sectors" >&2; exit 1; }
+[[ "$ORIG_SHA" =~ ^[0-9a-f]{64}$ ]] || { echo "FAIL: BOOT_SHA256 must be 64 lowercase hex digits" >&2; exit 1; }
 
 case "$MODE" in
   apply)   NEW=boot-patched.img;  OLD=boot-original.img ;;
@@ -24,7 +29,7 @@ esac
 
 # The original must still be the image cut from the verified dump.
 [ "$(sha256sum < "$P/boot-original.img" | cut -d' ' -f1)" = \
-  d71c313ddaa4693948acb20af7740ccb56c88bf9376746a47fce2d00c14fc6a4 ] \
+  "$ORIG_SHA" ] \
   || { echo "FAIL: boot-original.img is not the backed-up image" >&2; exit 1; }
 for f in "$NEW" "$OLD"; do
   [ "$(stat -c %s "$P/$f")" = "$LEN" ] || { echo "FAIL: $f is not $LEN bytes" >&2; exit 1; }
