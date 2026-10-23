@@ -88,7 +88,7 @@
     var day = V.date;
     var fam = App.timedOn(day).filter(App.isFamily);
     var allDay = App.allDayOn(day);
-    var ad = allDay.length ? '<div class="allday"><div class="gutter label">All day</div><div class="allday-grid">' + allDay.map(function (e) {
+    var ad = allDay.length ? '<div class="allday"><div class="gutter label">All day</div><div class="allday-grid" style="grid-template-columns:repeat(' + D.people.length + ',1fr)">' + allDay.map(function (e) {
       var fam2 = App.isFamily(e);
       var idx = D.people.map(function (p) { return p.id; }).indexOf(e.people[0]);
       var col = fam2 ? '1 / -1' : (idx + 1) + ' / span 1';
@@ -98,7 +98,7 @@
     }).join('') + '</div></div>' : '';
     var grid = '<div class="grid-scroll"><div class="grid" style="height:' + (END - START) * PX + 'px">' +
       '<div class="hours">' + hoursCol() + '</div>' +
-      '<div class="lanes">' + D.people.map(function (p) {
+      '<div class="lanes" style="grid-template-columns:repeat(' + D.people.length + ',1fr)">' + D.people.map(function (p) {
         var list = App.timedOn(day, p.id).filter(function (e) { return !App.isFamily(e); });
         return '<div class="lane" style="' + App.pstyle(p) + '">' + placeBlocks(list, null, p.id) + '</div>';
       }).join('') +
