@@ -169,6 +169,51 @@ Apple silicon, USB ADB only.
   white. `/oem` is a separate ext4 partition with no `media/` folder. `/system` mounts straight
   from `rknand0p11`, with no dm-verity device, although `ro.boot.veritymode` reads `enforcing`.
 
+## Third unit: moonka ZN-DP1002 (2026-10-22, Linux)
+
+A third owner's frame, from Amazon US, with Frameo's About screen reading **`moonka ZN-DP1002`**.
+Host: Ubuntu, USB ADB only, USB-A to USB-C data cable.
+
+- **Identity:** the fingerprint, `SSA_Frame_20260420`, USB ID `2207:0006`, the partition map
+  (sector for sector, including the 128 MiB recovery) and the 32 MiB boot partition SHA-256
+  `4ed777af…891b` all match the units above. No `/system/bin/iotv` (the hidden agent on the
+  [Runxion RK3126](runxion-zn-dp1002-rk3126.md#hidden-root-agent-iotv)).
+- **Frameo updated itself to a test build.** About showed v1.30.13, but `dumpsys package` listed
+  `v1.32.16_-_OTA_test` in `/data/app`, installed at 17:27 the evening before, one minute after
+  About's "Last check for update" time. The frame had been online for setup only. The `/system`
+  copy was still v1.30.13.
+- **ADB on Linux:** Frameo → About → Beta Program → ADB access. At first `adb devices` showed
+  `unauthorized`. Toggling ADB access with the cable in re-enumerated the device, and adb then
+  reported `no permissions` because the host had no udev rule for `2207`, so the key was never
+  offered and the prompt that was accepted did nothing. After adding
+  `SUBSYSTEM=="usb", ATTR{idVendor}=="2207", MODE="0660", GROUP="plugdev"` to
+  `/etc/udev/rules.d/` and toggling again, the prompt authorized the host. Port 5555 stayed
+  closed.
+- **Root:** `su 0 <cmd>` gives `uid=0`, no prompt.
+- **Backup stall:** a single `adb exec-out "su 0 dd …"` of the whole 1.9 GiB `system` partition
+  stopped after about 130 MiB and never resumed; the on-device `dd` sat in `S` state. Reading it
+  in 64 MiB chunks, each checked against an on-device SHA-256, completed; all 16 regions then
+  matched as in the [backup section](#verified-firmware-backup). No `0xCC` blocks.
+- **Home Assistant in the kiosk:** with Home HQ's saved URL set to a local Home Assistant, the
+  page loads Home Assistant's `frontend_es5` build. Its index only serves the modern build to
+  Chrome 130 and newer, and WebView 106 is older. The login page and dashboards render. With
+  **Keep me logged in**, the session survived a reboot.
+- **`.local` names don't resolve:** `homeassistant.local` returned `unknown host` on the frame
+  (Android 8.1 has no mDNS in its resolver). The router's DNS name (`homeassistant.lan` here) or
+  an IP address works.
+- **First load failed offline:** the first load after install got `ERR_INTERNET_DISCONNECTED`
+  on every request while Wi-Fi briefly dropped, and Home Assistant showed "Could not load Home
+  Assistant". A reload worked.
+- **Navigation service over ADB:** after `pm grant com.wesbos.homehq
+  android.permission.WRITE_SECURE_SETTINGS`, `settings put secure enabled_accessibility_services
+  com.wesbos.homehq/com.wesbos.homehq.NavigationService` and `settings put secure
+  accessibility_enabled 1` bound the service. The owner then checked by hand on the panel:
+  two-finger menu → Android settings → Apps → **Back** → **Dashboard**.
+- **Disabling Frameo stuck the first time,** following the second unit's pitfall: disable, wait
+  30 s, check that `package-restrictions.xml` shows `enabled="3"`, `sync`, then `adb reboot`.
+  After the reboot, the kiosk `.Home` was resumed, Frameo and both updaters were `enabled=3` with
+  no process, the navigation service was bound and Wi-Fi was connected.
+
 ## Guesses, not confirmed
 
 - Android probably writes `package-restrictions.xml` a few seconds after `pm disable-user`, and
