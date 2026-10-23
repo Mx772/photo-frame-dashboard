@@ -85,7 +85,9 @@ At the U-Boot prompt, the tested command was:
 ums 0 mmc 0
 ```
 
-This exposed the eMMC user area as a USB mass-storage disk to macOS. macOS offered to
+This exposed the eMMC user area as a USB mass-storage disk to macOS. Stock U-Boot's `ums` is
+**writable**: the computer can write to the frame's eMMC on its own. Don't open Disk Utility or any
+partition tool while it is attached, and leave UMS with Ctrl+C as soon as the read finishes. macOS offered to
 initialize an unreadable disk: choose **Ignore**, not Initialize. Identify the new disk
 by its exact byte size and partition table; never reuse someone else's `/dev/diskN`.
 Ctrl+C left UMS, and `boot` continued the normal Android startup. No replacement U-Boot

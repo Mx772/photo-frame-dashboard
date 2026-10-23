@@ -130,8 +130,7 @@ does **not** add these functions; avoid them, or add a polyfill.
     not measured. A clock text change once a minute, or an image swapped every few seconds,
     is a separate cost.
 - Very large frameworks or bundles. Aim for a JS bundle in the low hundreds of KB.
-- Re-rendering the whole page every second. Update only what changes (the clock text, for
-  example).
+- Re-rendering the whole page every second. See [Keep routine updates small](#keep-routine-updates-small).
 
 ## Keep routine updates small
 
@@ -174,18 +173,6 @@ unit and workload. These are also useful implementation patterns when building y
   slowing authentication expiry, schedule boundaries or inactivity checks. Recompute from
   the current wall clock on resume and time correction. Use elapsed/monotonic time where
   appropriate for inactivity; do not assume that counting timer callbacks measures sleep.
-
-A small amount of state owned by each view is enough for these guards; no shared store or
-framework is required. Use the existing small modules and events if they fit your site.
-
-The Dayframe implementation was checked in desktop Chromium, Firefox, WebKit and iPhone
-emulation: regression tests watch for unchanged clock writes, retain chart/forecast node
-identity across minute ticks, and verify that data fetched during an inactive mode appears
-on return. Similar checks can catch accidental rebuilds in another dashboard. Include time
-zone changes, midnight, stale/error transitions and return from sleep in your own checks.
-These browser tests do **not** measure CPU or memory savings on the frame. Pin a build and
-workload for a before/after device comparison, and analyze continuous-animation cost
-separately from DOM-update work.
 
 ## Network and HTTPS
 

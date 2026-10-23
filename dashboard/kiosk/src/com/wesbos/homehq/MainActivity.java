@@ -87,6 +87,7 @@ public class MainActivity extends Activity {
   static final String PORTAL_PROBE = "http://connectivitycheck.gstatic.com/generate_204";
   static final int PROBE_TIMEOUT_MS = 10000;
   static final long PORTAL_CHECK_MS = 5000;
+  static final long PORTAL_GIVE_UP_MS = 10 * 60 * 1000;
   static final int PROBE_ONLINE = 0, PROBE_PORTAL = 1, PROBE_FAILED = 2;
 
   private WebView web;
@@ -108,6 +109,7 @@ public class MainActivity extends Activity {
   private Button signIn;
   // Captive portal: found by the last probe, on screen, closed by the owner, or its page failed.
   private boolean probing, portalFound, portalMode, portalDismissed, portalFailed;
+  private long portalSince;
   private LinearLayout portalBar;
   private TextView portalText;
 
@@ -529,6 +531,12 @@ public class MainActivity extends Activity {
         leavePortal();
         return;
       }
+      if (SystemClock.elapsedRealtime() - portalSince > PORTAL_GIVE_UP_MS) {
+        Log.w(TAG, "Wi-Fi sign-in page still up after 10 min, retrying the dashboard");
+        portalDismissed = true; // the offline screen offers "Sign in to Wi-Fi" instead
+        leavePortal();
+        return;
+      }
       if (portalFailed && result == PROBE_PORTAL) {
         portalFailed = false;
         load(PORTAL_PROBE);
@@ -550,6 +558,7 @@ public class MainActivity extends Activity {
     portalMode = true;
     portalDismissed = false;
     portalFailed = false;
+    portalSince = SystemClock.elapsedRealtime();
     handler.removeCallbacks(retry);
     handler.removeCallbacks(stall);
     handler.removeCallbacks(portalCheck);

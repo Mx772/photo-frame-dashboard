@@ -257,7 +257,7 @@
 
   // Stage-local coordinates for an element's center (stage may be scaled on desktop)
   App.centerOf = function (el) {
-    var stage = $('#stage').getBoundingClientRect(), r = el.getBoundingClientRect(), k = stage.width / 1280;
+    var stage = $('#stage').getBoundingClientRect(), r = el.getBoundingClientRect(), k = stage.height / 800;
     return { x: (r.left + r.width / 2 - stage.left) / k, y: (r.top + r.height / 2 - stage.top) / k };
   };
 
