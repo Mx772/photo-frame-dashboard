@@ -133,6 +133,60 @@ does **not** add these functions; avoid them, or add a polyfill.
 - Re-rendering the whole page every second. Update only what changes (the clock text, for
   example).
 
+## Keep routine updates small
+
+[Issue #156](https://github.com/wesbos/photo-frame-dashboard/issues/156) reports three useful
+JS changes on one PF1007L: cache `Intl.DateTimeFormat`, repaint only changed data, and update
+a minute-resolution clock once a minute. Its timing/CPU figures belong to that contributor's
+unit and workload. These are also useful implementation patterns when building your own site:
+
+- **Cache formatters for the current locale/time zone.** Recreate them when either changes,
+  rather than constructing one for every row or tick. A clock showing only hours/minutes
+  needs formatting on minute changes, time-zone changes and return from sleep. Date text
+  needs updating only when its displayed value changes. For example, with a fixed locale:
+
+  ```js
+  var clockZone, clockFormatter;
+  function updateClock(element, now, timezone) {
+    if (clockZone !== timezone) {
+      clockFormatter = new Intl.DateTimeFormat('en-GB', {
+        timeZone: timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+      });
+      clockZone = timezone;
+    }
+    var text = clockFormatter.format(now);
+    if (element.textContent !== text) element.textContent = text;
+  }
+  ```
+
+- **Separate data updates from elapsed-time updates.** Keep forecast rows, icons and chart
+  curves in place until new data or a new local day requires rebuilding them. Move the
+  current-time marker and refresh stale-age labels independently. Replacing a container's
+  `innerHTML` recreates its children even when the output looks unchanged; avoid that work
+  on every tick.
+- **Choose an inactive-view policy deliberately.** A simple site can retain fetched data
+  and defer DOM updates while its view or the document is hidden, then render the latest
+  state on return. Keep fetch/cache/backoff independent of visual activity. The demo's
+  `js/app.js` deliberately prebuilds hidden views to improve navigation latency; removing
+  that behavior has a tradeoff, so measure before changing it. Stop unnecessary slideshow
+  timers when their view is inactive.
+- **Keep correctness deadlines independent.** Reducing clock/chart painting does not mean
+  slowing authentication expiry, schedule boundaries or inactivity checks. Recompute from
+  the current wall clock on resume and time correction. Use elapsed/monotonic time where
+  appropriate for inactivity; do not assume that counting timer callbacks measures sleep.
+
+A small amount of state owned by each view is enough for these guards; no shared store or
+framework is required. Use the existing small modules and events if they fit your site.
+
+The Dayframe implementation was checked in desktop Chromium, Firefox, WebKit and iPhone
+emulation: regression tests watch for unchanged clock writes, retain chart/forecast node
+identity across minute ticks, and verify that data fetched during an inactive mode appears
+on return. Similar checks can catch accidental rebuilds in another dashboard. Include time
+zone changes, midnight, stale/error transitions and return from sleep in your own checks.
+These browser tests do **not** measure CPU or memory savings on the frame. Pin a build and
+workload for a before/after device comparison, and analyze continuous-animation cost
+separately from DOM-update work.
+
 ## Network and HTTPS
 
 - **Prefer plain `http://` on the local network.** The kiosk allows cleartext traffic.
