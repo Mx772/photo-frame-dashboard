@@ -224,6 +224,8 @@ Host: Ubuntu, USB ADB only, USB-A to USB-C data cable.
   which Android component reads it is not checked.
 - The board is probably the same SSA RK3326 frame as the Runxion 10.1" in
   [PR #58](https://github.com/wesbos/photo-frame-dashboard/pull/58), which also uses `su 0 <cmd>`.
+  Since confirmed on one Runxion unit (older firmware, same partition map):
+  [runxion-zn-dp1002-rk3326.md](runxion-zn-dp1002-rk3326.md).
 - The USB-C port probably lacks the CC pull-down resistors a USB-C host needs before supplying
   power, which would explain a USB-C to USB-C cable doing nothing.
 - The Akimart listing likely ships more than one board, as other listings in the
