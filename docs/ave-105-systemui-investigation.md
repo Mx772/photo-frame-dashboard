@@ -1,5 +1,8 @@
 # AVE-105: Rockchip platform signing and donor SystemUI
 
+> **Record, not a procedure.** One unit, unfinished. The rebuild tools are not in this repo. Don't
+> reproduce it.
+
 Findings from one [AVE-105, Android 9 Go unit](ave-105.md), tested on 2026-10-17
 from macOS on Apple Silicon. This documents an experimental userdata-only
 restoration. No system/vendor/boot partition was remounted or changed.
@@ -41,8 +44,7 @@ The signature on the frame's `framework-res.apk` verifies with Android SDK
 
 The certificate matches the pinned public
 [ASUS Tinker Board Rockchip Android 9 platform certificate](https://github.com/TinkerBoard-Android/rockchip-android-build/blob/7f04fdfe9bd7adbf552d6aee63d436826c8f2dad/target/product/security/platform.x509.pem).
-That same source tree also publicly publishes the matching
-[development private key, `platform.pk8`](https://github.com/TinkerBoard-Android/rockchip-android-build/blob/7f04fdfe9bd7adbf552d6aee63d436826c8f2dad/target/product/security/platform.pk8).
+The same public tree also contains the matching private key.
 The private key's derived public key was compared with the device certificate's
 public key and matched. This establishes signing capability, not merely a match
 between two public certificates. The key was already published upstream; it

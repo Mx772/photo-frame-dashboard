@@ -292,8 +292,6 @@ uniform `0xCC`. The whole-disk hash is not published.
 `/proc/partitions` reports the user area as 15,386,672 one-kilobyte blocks. `mmcblk0boot0` and
 `mmcblk0boot1` are each 4,096 one-kilobyte blocks (4,194,304 bytes).
 
-boot0 SHA-256: `360be2a99f6d5a87a0ce45f3efe51499b8038e72c8ae67981e7d7c7c9a50e010`
-
 boot1 was entirely zeros at that size, and a second full read matched. BusyBox on the device is
 v1.18.3. Stock toybox has no `sha256sum`. BusyBox `dd bs=1048576 skip=2164 count=32` read
 recovery from `mmcblk0` past 2 GiB and matched a read of `/dev/block/by-name/recovery`.

@@ -1,6 +1,6 @@
 # MONOCUS WF105T (10.1" Frameo, BMY-106, RK3126, Android 6.0.1)
 
-Record of one unit, bought from [Amazon US, B0HBQ5N8NL](https://www.amazon.com/dp/B0HBQ5N8NL)
+Record of one unit, bought from [Amazon US, B0HBQ5N8NL](https://www.amazon.com/dp/B0HBQ5N8NL?tag=webo080-20)
 and configured on 2026-10-17 using macOS (Apple silicon). **Frameo settings shows model `WF105T`**;
 Android's model is `Frame` and product/device is `BMY-106`. Match the fingerprint below, not just
 the retail name. Unique identifiers, dashboard URLs and app data stay in private, ignored records.

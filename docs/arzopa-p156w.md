@@ -13,7 +13,7 @@ stock WebView is
 [Dashboard compatibility](#dashboard-compatibility)).
 
 This is a different device from the ARZOPA identified by its app rather than by Frameo
-([PR #131](https://github.com/wesbos/photo-frame-dashboard/pull/131), RK3126, `incar` board,
+([arzopa-frame.md](arzopa-frame.md), RK3126, `incar` board,
 Arzopa home app). Match the About screen, not the brand. **No Arzopa package exists on this
 unit**: its vendor app is Frameo, so the Arzopa app's hidden ADB toggle and its fixed code do not
 apply here.
@@ -194,8 +194,8 @@ adb shell su -c 'setprop persist.internet.adb.enable 0'
 
 `adb usb` alone only returns the *current* boot to USB; the property still applies at the next one.
 `ro.adb.secure=1` continues to apply over TCP, so only a host whose key is already in
-`/data/misc/adb/adb_keys` can attach, and a new host still needs the on-screen prompt. The port is
-not open to anything else on the LAN.
+`/data/misc/adb/adb_keys` can attach, and a new host still needs the on-screen prompt. A fresh key
+was not tested. Anything on the LAN can reach port 5555, so keep the frame on a trusted network.
 
 ## Partition table (eMMC `mmcblk2`, 512-byte sectors)
 
@@ -323,6 +323,9 @@ is, however, a route that keeps the stock WebView in place entirely — see belo
 
 ### A modern WebView without touching `/system` (verified)
 
+> **Record, not a procedure.** One unit. The overlay is a third-party binary, not built from this
+> repo, and is written to `/vendor`. Mulch is no longer updated (DivestOS ended in December 2024).
+
 The ROM's WebView provider list is **configurable**, so a **vendor resource overlay** can add a
 second provider. The stock WebView stays installed and stays the fallback. Verified on this unit on
 2026-10-16.
@@ -351,9 +354,12 @@ calls it, so a vendor overlay is not required to carry the platform key.
 adb install -r mulch-131-arm64-webview.apk                 # ordinary app, reversible
 adb shell su -c 'mount -o rw,remount /vendor'
 adb push treble-overlay-mulch-webview.apk /data/local/tmp/
-adb shell su -c 'cp /data/local/tmp/treble-overlay-mulch-webview.apk /vendor/overlay/ \
+adb shell su -c '[ "$(sha256sum /data/local/tmp/treble-overlay-mulch-webview.apk | cut -d" " -f1)" = \
+                   372fe0ba0cb7b98e98346978b12d3aeb073ea4cde0fd033c9b1a775187394a5a ] \
+                 && cp /data/local/tmp/treble-overlay-mulch-webview.apk /vendor/overlay/ \
                  && chmod 644 /vendor/overlay/treble-overlay-mulch-webview.apk \
                  && chown root:root /vendor/overlay/treble-overlay-mulch-webview.apk && sync'
+adb shell su -c 'rm /data/local/tmp/treble-overlay-mulch-webview.apk'
 adb shell su -c 'mount -o ro,remount /vendor'
 adb reboot
 adb shell cmd overlay list | grep mulch                    # [x] com.alpha.mulch.webview.overlay
@@ -552,7 +558,7 @@ which is why the WebView/modern-engine route above is the way to keep the dashbo
 | 3 Loader mode | Not reached, not needed so far. |
 | 4 Back up | Done and verified over ADB, before `userdata`. Restore path untested. |
 | 5 Root | Shipped `su` works with no prompt. |
-| 6 Make it useful | **Partly.** A current WebView is in place through the vendor overlay route, and the dashboard renders on it. The kiosk app itself has not been built or installed on this unit. |
+| 6 Make it useful | **Partly.** Mulch 131 through the vendor overlay; the Home HQ kiosk (`com.wesbos.homehq`) is the Home app (see Changes made). |
 | 7 Networking | Onboard Wi-Fi works. Network ADB enabled over TCP on the frame's own Wi-Fi — see [ADB over Wi-Fi](#adb-over-wi-fi). |
 | 8 Vendor updates | Done: `com.adups.fota` and `android.rockchip.update.service` are disabled (see [Changes made](#changes-made-to-the-frame)), and their endpoints are recorded under [Update checks](#update-checks-the-urls-behind-each-updater). Note that Frameo had **already replaced its own version**: the running copy was v1.32.16 in `/data/app`, not the `/system/priv-app/Frameo` copy; Frameo itself is disabled too now — see [the later note](#changes-made-to-the-frame). |
 | 9 Security hand-off | Pending. |

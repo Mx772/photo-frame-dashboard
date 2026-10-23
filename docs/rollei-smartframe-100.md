@@ -88,7 +88,7 @@ written. Made after the verified backup. Run each command through `adb shell "..
 | Adups FOTA off | `su -c 'pm disable com.adups.fota; pm hide com.adups.fota'` | `su -c 'pm unhide com.adups.fota; pm enable com.adups.fota'` |
 | Adups helper off | `su -c 'pm disable com.adups.fota.sysoper'` | `su -c 'pm enable com.adups.fota.sysoper'` |
 | Rockchip updater off | `su -c 'pm disable android.rockchip.update.service'` | `su -c 'pm enable android.rockchip.update.service'` |
-| Home Assistant installed | `adb install -r` of the Home Assistant **minimal** APK from the app's official [GitHub releases](https://github.com/home-assistant/android/releases/latest) (`io.homeassistant.companion.android.minimal`) | `adb uninstall io.homeassistant.companion.android.minimal` |
+| Home Assistant installed | `adb install -r` of the Home Assistant **minimal** APK from the app's official [GitHub release 2026.8.4](https://github.com/home-assistant/android/releases/download/2026.8.4/app-minimal-release.apk), SHA-256 `8f58a7df71c61447d3370f5d5956a66e3523625dc4b51c8434bd166d3e731bea` (`io.homeassistant.companion.android.minimal`) | `adb uninstall io.homeassistant.companion.android.minimal` |
 | Home Assistant as Home | In the app: Settings → Companion app → Device home screen → **Allow as home app** (enables the `io.homeassistant.companion.android.launch.LauncherAlias` component) | Turn it off in the same place |
 | Frameo off | `su -c 'pm disable net.frameo.frame'` | `su -c 'pm enable net.frameo.frame'` (its data is untouched) |
 
