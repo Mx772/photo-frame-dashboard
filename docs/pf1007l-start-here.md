@@ -40,6 +40,7 @@ Unit reports with more detail: [unit A's custom tool](allwinner-a33-boot-access.
 [May `20260519` on macOS, 12 MHz Route U and the full kiosk setup](pf1007l-macos-20260519-12mhz-full-setup-report.md),
 [May `20260529` on macOS](pf1007l-macos-20260529-report.md),
 [May `20260529` on Windows + WSL](pf1007l-windows-20260529-report.md),
+[May `20260529` T3c + full native-Windows setup](pf1007l-windows-20260529-t3c-report.md),
 [May `20260529` from a TF card, with Home Assistant](pf1007l-tf-card-20260529-home-assistant-report.md),
 [PF1009 July `20260708` on Windows](pf1009-20260708-windows-report.md).
 
