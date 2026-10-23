@@ -306,10 +306,16 @@
   }
   App.resetIdle = function () { idleSec = 0; };
 
-  // ------------------------------------------------------------ stage scaling (desktop preview only)
+  // ------------------------------------------------------------ stage scaling
+  // Designed at 1280×800. Screens wider than 16:10 (e.g. 1920×1080 frames) widen the stage to their
+  // aspect instead of pillarboxing; narrower screens letterbox as before.
+  var STAGE_H = 800, STAGE_MIN_W = 1280;
   function fit() {
-    var s = Math.min(window.innerWidth / 1280, window.innerHeight / 800);
-    $('#stage').style.transform = Math.abs(s - 1) < 0.01 ? '' : 'scale(' + s + ')';
+    var stage = $('#stage');
+    var w = Math.max(STAGE_MIN_W, Math.round(STAGE_H * window.innerWidth / window.innerHeight));
+    stage.style.setProperty('--stage-w', w + 'px');
+    var s = Math.min(window.innerWidth / w, window.innerHeight / STAGE_H);
+    stage.style.transform = Math.abs(s - 1) < 0.01 ? '' : 'scale(' + s + ')';
   }
 
   // ------------------------------------------------------------ clock tick
