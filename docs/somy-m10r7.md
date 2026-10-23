@@ -120,12 +120,10 @@ id matched.
 
 The patch is the one in [section 2 of the SD-card guide](allwinner-a33-sdcard-adb-wifi.md#2-what-the-patch-changes):
 `ro.adb.secure=1`, `service.adb.tcp.port=5555`, `on boot` → `start adbd`, and one `/adb_keys`
-line. The repository scripts were used with two values changed in copies:
-
-| Script | Change |
-| --- | --- |
-| `patch-boot.py` | `BOOT_LEN = 14_911_488`, and a stop unless p6 hashes to `529ef1ee…` |
-| `build-write.sh` | `LEN=14911488` (29,124 sectors) and the original hash `529ef1ee…` |
+line. At the time, copies of `patch-boot.py` and `build-write.sh` were edited with this unit's
+length (14,911,488 bytes, 29,124 sectors) and hash (`529ef1ee…`). Don't do that: `build-write.sh`
+now lists this image as tested, and `patch-boot.py` takes
+`--boot-len 14911488 --expect-sha256 529ef1ee32e546e847f532c640922800d05edff986bb819f6dd9fa38c3c650be`.
 
 p6 starts at sector 172032 (`0x2a000`), as on the PF1007L, so `boot-write.cmd.in` is unchanged.
 The new ramdisk compressed to 4,727,586 bytes, smaller than the stock 4,741,147, so it fits the

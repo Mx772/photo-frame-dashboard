@@ -41,7 +41,7 @@ case "$MODE" in
             }
         ;;
     apply|restore)
-        "${RUN[@]}" -e BOOT_LEN -e BOOT_SHA256 \
+        "${RUN[@]}" \
             --mount "type=bind,src=$OUT,dst=/repo/diagnostics/a33-sdboot,readonly" \
             --mount "type=bind,src=$PATCHED,dst=/repo/diagnostics/pf1007/patched" \
             frame-a33-sdboot-build bash /repo/scripts/a33-sdboot/build-write.sh "$MODE"

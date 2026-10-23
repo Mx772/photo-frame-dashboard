@@ -14,7 +14,8 @@ the output is padded to the original image size. Run with `python -I`.
   python -I scripts/a33-sdboot/patch-boot.py --pubkey ~/.android/adbkey.pub --out DIR
 
 Other boards with p6 at the same sector (the SOMY/Pastigio ZC002 family, M10R7): first print
-that board's boot image length and SHA-256, then pass both:
+that board's boot image length and SHA-256, then pass both. build-write.sh only builds a write
+for images in TESTED:
 
   python -I scripts/a33-sdboot/patch-boot.py --inspect
   python -I scripts/a33-sdboot/patch-boot.py --pubkey ... --out DIR --boot-len N --expect-sha256 H
@@ -32,6 +33,11 @@ BOOT_START_SECTOR = 172032  # p6, from docs/allwinner-a33-sdcard-adb-wifi.md
 BOOT_LEN = 15_886_336  # kernel 10,221,784 + ramdisk 5,660,297 padded to 2048
 CHUNK = 64 * 1024 * 1024
 TCP_PORT = "5555"
+# Tested original boot images at p6: SHA-256 -> bytes. Keep in step with TESTED in build-write.sh.
+TESTED = {
+    "d71c313ddaa4693948acb20af7740ccb56c88bf9376746a47fce2d00c14fc6a4": 15_886_336,  # PF1007L 20260113
+    "529ef1ee32e546e847f532c640922800d05edff986bb819f6dd9fa38c3c650be": 14_911_488,  # SOMY M10R7_20260313
+}
 
 
 def die(msg):
@@ -172,6 +178,8 @@ def inspect(dump):
     """Length and hash of the Android boot image at p6, read from its own header."""
     head = read_boot(dump, 4096)
     h = parse_header(head)
+    if h["page"] != 2048:
+        die(f"unexpected page size {h['page']}")
     koff, roff, soff, doff, up = layout(h)
     n = h["page"] + up(h["ksz"]) + up(h["rsz"]) + up(h["ssz"]) + up(h["dtsz"])
     img = read_boot(dump, n)
@@ -179,6 +187,10 @@ def inspect(dump):
     print(f"boot image at sector {BOOT_START_SECTOR}: page {h['page']}, kernel {h['ksz']}, ramdisk {h['rsz']}")
     print(f"--boot-len {n} --expect-sha256 {sha256(img)}")
     print(f"header boot id matches: {ok}")
+    if TESTED.get(sha256(img)) == n:
+        print("this is a tested boot image")
+    else:
+        print("this boot image is not in TESTED: build-write.sh will refuse it. Open a PR with this output")
     if h["ssz"] or h["dtsz"]:
         print("this image has second/dt sections: this builder can't patch it")
 
@@ -199,6 +211,8 @@ def main():
         return inspect(Path(a.dump))
     if not (a.pubkey and a.out):
         ap.error("--pubkey and --out are required (or use --inspect)")
+    if a.boot_len != BOOT_LEN and not a.expect_sha256:
+        ap.error("--boot-len needs --expect-sha256")
     boot_len = a.boot_len
 
     key = Path(a.pubkey).expanduser().read_text().strip().replace("\r", "")
@@ -210,6 +224,8 @@ def main():
     if a.expect_sha256 and sha256(img) != a.expect_sha256.lower():
         die(f"p6 in the dump is {sha256(img)}, not the expected {a.expect_sha256}")
     h = parse_header(img)
+    if h["page"] != 2048:
+        die(f"unexpected page size {h['page']}")
     koff, roff, soff, doff, up = layout(h)
     if h["ssz"] or h["dtsz"]:
         die("image has second/dt sections; this builder assumes none")
@@ -232,6 +248,12 @@ def main():
     new = bytes(new)
     if len(new) != boot_len:
         die("size changed")
+    if img[koff:koff + h["ksz"]] != new[koff:koff + h["ksz"]]:
+        die("kernel region changed")
+    if img[:16] != new[:16] or img[20:0x240] != new[20:0x240] or img[0x260:koff] != new[0x260:koff]:
+        die("header changed outside the ramdisk size and boot id")
+    if img[roff + up(h["rsz"]):] != new[roff + up(h["rsz"]):]:
+        die("bytes after the ramdisk slot changed")
 
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
