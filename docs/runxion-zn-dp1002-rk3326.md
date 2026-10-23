@@ -10,7 +10,7 @@ unit is the **RK3326 / Android 8.1** one, and it confirms the guess in the
 [Akimart page](akimart-zn-dp1002.md#guesses-not-confirmed): it is the same SSA RK3326 board, with
 the same logical NAND partition map. Two things differ from the Akimart units. The firmware is older
 (`SSA_Frame_20250928`), and the stock WebView is **61**, not 106. So this unit needed a WebView swap
-in `/system`, like the [YENOCK ZN-DP1501 in #220](https://github.com/wesbos/photo-frame-dashboard/pull/220)
+in `/system`, like the [YENOCK ZN-DP1501](yenock-zn-dp1501.md)
 (WebView 61, same stock `webview.apk`) and the
 [FRAME156](pastigio-frame156.md#webview-138-in-place-of-the-vendor-webview-106) (#139).
 
@@ -41,7 +41,7 @@ straight into the kiosk. Frameo's boot splash still shows, because it is in the 
 
 Compared with the closest documented units:
 
-| | This unit | [Akimart ZN-DP1002](akimart-zn-dp1002.md) | YENOCK ZN-DP1501 ([#220](https://github.com/wesbos/photo-frame-dashboard/pull/220), open) |
+| | This unit | [Akimart ZN-DP1002](akimart-zn-dp1002.md) | [YENOCK ZN-DP1501](yenock-zn-dp1501.md) |
 | --- | --- | --- | --- |
 | Panel | 10.1", 1280×800 | 10.1", 1280×800 | 15.6", 1920×1080 |
 | Firmware | `SSA_Frame_20250928` | `SSA_Frame_20260420` | `SSA_Frame_20250814` |
@@ -76,7 +76,7 @@ Every region passed all the README rule 2 checks:
 - `gzip -t` readback.
 
 Because the host and on-device hashes matched, this firmware's `su` does not translate LF to CRLF
-in binary output, unlike the YENOCK (#220) and 21" SSA (#219) units in open PRs.
+in binary output, unlike the [YENOCK](yenock-zn-dp1501.md) and [21" SSA](ssa-frame-21inch-rk3326.md) units.
 
 Pitfall: **`frp` came out as 0 bytes.** It is only 512 KiB (1,024 sectors), so `count=size/1M`
 rounded down to `count=0`. The byte-count check flagged it as a mismatch. Redone with `bs=4096
@@ -117,7 +117,7 @@ Notes:
 ## WebView 106 in place of the stock WebView 61
 
 WebView 61 is too old for most modern pages. The repo's dashboard targets 106. The stock tree here
-matched the YENOCK record in #220, so the same `/system` swap applied. It followed the
+matched the [YENOCK record](yenock-zn-dp1501.md#webview-138-in-place-of-the-vendor-webview-61), so the same `/system` swap applied. It followed the
 [FRAME156 record](pastigio-frame156.md#webview-138-in-place-of-the-vendor-webview-106) and the
 [PF1007L procedure](allwinner-a33-pf1007l.md#6-upgrade-webview-before-using-the-kiosk), with 106
 instead of 138. **Do not use `adb install -r`:** the stock WebView is vendor-signed, so an update
@@ -135,7 +135,7 @@ The stock tree's other two files, as recorded before the swap:
 
 | Stock file | SHA-256 |
 | --- | --- |
-| `oat/arm/webview.vdex` | `b124df0a720926e48bbfc116fd96ce62aed9b8ab7ab828ad0c2b784f58643da0` (same as the YENOCK unit in #220) |
+| `oat/arm/webview.vdex` | `b124df0a720926e48bbfc116fd96ce62aed9b8ab7ab828ad0c2b784f58643da0` (same as the YENOCK unit) |
 | `oat/arm/webview.odex` | `73b1246eb3aa466ab0c58756e274e472fc2a1771e993c732feaf5ed1cc26a1b0` (differs from the YENOCK's `352fb0ef…4a5c`) |
 
 The `.odex` is compiled code, so it can differ between builds even when the APK is the same. Compare
@@ -171,9 +171,7 @@ instead. It shows that page for top-level navigations that send `Sec-Fetch-Dest:
 kiosk would hit the page again every day. XHR and iframe loads are not affected. The kiosk only
 saves `http`/`https` URLs, so a `data:` or `file:` shell page is not an option either.
 
-What worked: a private S3 bucket behind CloudFront (Origin Access Control, caching disabled). It
-costs pennies a month, and deploys use an upload-only IAM key. Any static host without an
-interstitial would do, for example the repo's Cloudflare Workers setup.
+Any static host without an interstitial works, for example the repo's Cloudflare Workers setup.
 
 ## Measured on this unit (WebView 106)
 
@@ -199,23 +197,9 @@ Measured with a small set of browser test pages loaded in the kiosk:
   on at low brightness if the page must stay current.
 - The Frameo boot splash still shows on every boot, since it is part of the firmware.
 
-## What it runs: Cotidiano
+## What it runs
 
-The frame is now **Cotidiano**, a panel whose design is new every day. Each morning an AI
-assistant (Grok Bot) collects the day's inputs: a workout tag from a trainer bot, a note from a chef bot (only for a missing staple, a big macro miss or a meal-prep day), the calendar, the
-weather, notable market moves and the shopping list. At 6 AM it designs a fresh, free-form page
-around a different visual idea each day, such as a topographic trail map or a mid-century hanging
-mobile. It checks the page in a headless browser at 1280×800, then publishes it. It patches the
-page at noon and 6 PM if something changes.
-
-On the frame, a small shell page polls a `manifest.json` every 60 s and crossfades the new page in
-through an iframe `srcdoc`. It keeps the last good page in `localStorage`, so a reboot without
-network still shows something. The design rules are not fixed up front. The owner's reactions go into a
-likes/dislikes file, and the measurements above go into a device-limits file. Each day's page reads
-both. A monthly pass turns lessons into short text rules and prunes old pages and screenshots.
-Next: touch interactions, and a corner where friends can send in a photo or a note.
-
-More in [this post](https://x.com/th1nkp0l/status/2113670270774821307).
+The frame runs Cotidiano; see [Community Builds](community-builds.md).
 
 ## Guesses, not confirmed
 

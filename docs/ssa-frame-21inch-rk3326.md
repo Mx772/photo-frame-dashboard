@@ -4,8 +4,7 @@ Investigated 2026-10-20. A record of one owner's unit, not a flashing guide. Hos
 (x86_64), USB-A to USB-C data cable.
 
 This 21.5" frame is the same **SSA RK3326** board family as the
-[Akimart ZN-DP1002](akimart-zn-dp1002.md) and
-[Pastigio FRAME156](pastigio-frame156.md), but a distinct build with a different partition
+[Akimart ZN-DP1002](akimart-zn-dp1002.md), but a distinct build with a different partition
 layout (an extra `fotocube` partition). It is not documented elsewhere, so match the About
 screen / fingerprint before following any other guide.
 
@@ -82,6 +81,9 @@ by one partition number. Do not reuse the Akimart offsets. `userdata` starts at 
   of `uboot`, `boot` and `recovery` matched.
 - Whole 32 MiB `boot` partition SHA-256:
   `3265239bd427755411ba06982bdc508b465609d1cd8d8a8e7967d63ced815cf9`.
+- Byte counts and a gzip readback were not recorded, so treat this backup as not fully meeting
+  [README rule 2](../README.md#rules-we-learned-the-hard-way). Delete the images from
+  `/data/local/tmp` after the pull.
 
 ## Setup performed (2026-10-20)
 
@@ -92,7 +94,7 @@ Each change was reversible and needed no flash write; undo commands are listed.
 | Disable Adups FOTA | `pm disable-user --user 0 com.adups.fota` | `pm default-state --user 0 com.adups.fota` |
 | Disable Rockchip updater | `pm disable-user --user 0 android.rockchip.update.service` | `pm default-state --user 0 android.rockchip.update.service` |
 | Install kiosk | `adb install -r dashboard/kiosk/build/homehq.apk` | `adb uninstall com.wesbos.homehq` |
-| Kiosk as HOME | `am start -n com.wesbos.homehq/.MainActivity --ez home true` then `cmd package set-home-activity com.wesbos.homehq/.Home` | re-run with Frameo's home activity |
+| Kiosk as HOME | `am start -n com.wesbos.homehq/.MainActivity --ez home true` then `cmd package set-home-activity com.wesbos.homehq/.Home` | `pm default-state --user 0 net.frameo.frame`, then `cmd package set-home-activity --user 0 net.frameo.frame/.ui.activities.AWaitForDeferredInitCompleted` |
 | Dashboard URL | `scripts/set-kiosk-url.sh https://<your-dashboard>/` | re-run with a new URL |
 | Disable Frameo | `pm disable-user --user 0 net.frameo.frame` | `pm default-state --user 0 net.frameo.frame` |
 | Timezone | `setprop persist.sys.timezone <zone>` | set back (ships `America/Los_Angeles`) |

@@ -137,8 +137,8 @@ and sizes, including `userdata` at 6,669,312 with 53,885,888 sectors.
   `sha256sum` and byte counts, with a gzip readback and no `0xCC` blocks. About 2 MB/s, roughly
   35 minutes. Three things broke the first tries:
   - `adb exec-out "su 0 dd …"` corrupts binary output, the same 4,197-byte result for a 4 KiB read
-    reported in [#219](https://github.com/wesbos/photo-frame-dashboard/pull/219) and
-    [#220](https://github.com/wesbos/photo-frame-dashboard/pull/220). `adb root`, then plain
+    reported for the [21.5" SSA frame](ssa-frame-21inch-rk3326.md#verified-firmware-backup) and
+    the [YENOCK](yenock-zn-dp1501.md#root-and-binary-reads). `adb root`, then plain
     `adb exec-out dd …`, was byte-exact.
   - `dd if=/dev/block/rknand0 skip=…` failed with `Invalid argument` for every offset past 2 GiB.
     Reading each partition from its own node (`/dev/block/rknand0p12` and so on) from offset 0
@@ -160,4 +160,4 @@ and sizes, including `userdata` at 6,669,312 with 53,885,888 sectors.
   `tinymix 'Capture MIC Path' 'Main Mic'`, an 8 s `tinycap` recording during claps and speech stayed
   flat at −67 dBFS (peak −50.6 dBFS). No mic hole was visible.
 - **Time zone:** the frame shipped on `America/New_York`. As root,
-  `service call alarm 3 s16 Australia/Sydney` changed it.
+  `service call alarm 3 s16 <zone>` changed it.

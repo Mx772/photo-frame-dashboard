@@ -85,11 +85,13 @@ stock tree's hashes recorded first so the undo can be checked.
 | Stock `/system/app/webview/webview.apk` (61.0.3163.98) | `db1f9a147730a4893670ea98fc72ee8060fdc0b0861485bec8ba63405affbc3b` |
 | Stock `oat/arm/webview.odex` | `352fb0ef5a90658d2fd812cfcd0e3d9e6d2898a789c06eba6496ec9688194a5c` |
 | Stock `oat/arm/webview.vdex` | `b124df0a720926e48bbfc116fd96ce62aed9b8ab7ab828ad0c2b784f58643da0` |
-| New `webview.apk` 138.0.7204.63 ARM (LineageOS LFS object) | `b7268786318f404bdad53eaaec889619ff30100b935541a9e393e32efed3cf11` |
+| New `webview.apk` 138.0.7204.63 ARM (LineageOS LFS object; source as in [the FRAME156 record](pastigio-frame156.md#webview-138-in-place-of-the-vendor-webview-106)) | `b7268786318f404bdad53eaaec889619ff30100b935541a9e393e32efed3cf11` |
 | New `lib/arm/libwebviewchromium.so` | `d217fc3847fad5cecc1f37ffa8461b95fc2bb32586f63f01285381239c11b03d` |
 | New `lib/arm/libcrashpad_handler_trampoline.so` | `e16d7cd6d1669d6da68997099425501f8bb6d6f0ae3bb6c8dbbb0bc8e0f4441d` |
 
 `/system` is `/dev/block/by-name/system` (`rknand0p11`) ext4 `ro`, no `/dev/block/dm-*`, 1.0 GB free.
+> **Record, not a procedure.** The script is not in this repo.
+
 A root script staged in `/data/local/tmp`:
 
 1. checked the staged files and the stock tree against the hashes above, and refused if the
@@ -103,7 +105,7 @@ A root script staged in `/data/local/tmp`:
 After `adb reboot`, `dumpsys webviewupdate` reported `com.android.webview, 138.0.7204.63` with
 `codePath=/system/app/webview`, logcat showed no WebView load errors, and the kiosk rendered Home
 Assistant. Undo (not run): remount read-write, move `/system/app/webview` aside, move
-`/system/webview-stock-61` back, remount read-only, reboot.
+`/system/webview-stock-61` back, check its hashes against the table above, remount read-only, reboot.
 
 ## Kiosk, HOME and portrait
 
@@ -114,7 +116,7 @@ Assistant. Undo (not run): remount read-write, move `/system/app/webview` aside,
 | Kiosk | `adb install` of `dashboard/kiosk`, `pm grant com.wesbos.homehq android.permission.WRITE_SECURE_SETTINGS`, URL saved with `scripts/set-kiosk-url.sh` | `adb uninstall com.wesbos.homehq` |
 | Kiosk as HOME | `am start -n com.wesbos.homehq/.MainActivity --ez home true`, then `cmd package set-home-activity com.wesbos.homehq/.Home` | Pick another Home app, then `--ez home false` |
 | Disable Frameo | `pm disable-user --user 0 net.frameo.frame` | `pm enable net.frameo.frame` |
-| Time zone | `su -c "setprop persist.sys.timezone Europe/Berlin"`, `su -c "service call alarm 3 s16 Europe/Berlin"` | the same with `America/Los_Angeles` |
+| Time zone | `su -c "setprop persist.sys.timezone <zone>"`, `su -c "service call alarm 3 s16 <zone>"` | the same with `America/Los_Angeles` |
 
 - `package-restrictions.xml` showed Frameo `enabled="3"` and the kiosk's HOME preference about
   3 s after the commands. The reboot was done after 30 s; afterwards the frame booted into the

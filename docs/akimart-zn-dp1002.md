@@ -71,6 +71,20 @@ Same partition names, order and NAND size as the [VESWWE DP100](veswwe-10.1.md),
 is 128 MiB rather than 64 MiB, which shifts every later partition by 131,072 sectors. Do not reuse
 the VESWWE offsets. `/system`, `/vendor` and `/oem` mount ext4 read-only; `/data` is ext4.
 
+## Other builds of this board
+
+Same SSA RK3326 board, different firmware. Match your fingerprint and boot hash before following
+any of these pages.
+
+| Sold as | Firmware | Stock WebView | `su` over `adb exec-out` | Partition map | Page |
+| --- | --- | --- | --- | --- | --- |
+| Akimart, Dxmart, moonka ZN-DP1002 10.1" | `SSA_Frame_20260420` | 106 | byte-clean | above | this page |
+| Runxion 10.1" | `SSA_Frame_20250928` | 61 | byte-clean | same | [runxion-zn-dp1002-rk3326.md](runxion-zn-dp1002-rk3326.md) |
+| YENOCK ZN-DP1501 15.6" | `SSA_Frame_20250814` | 61 | adds CR | same | [yenock-zn-dp1501.md](yenock-zn-dp1501.md) |
+| SSA "Frame" 21.5" | `SSA_Frame_21inch-20260518` | 106 | adds CR | extra `fotocube`, later partitions shifted | [ssa-frame-21inch-rk3326.md](ssa-frame-21inch-rk3326.md) |
+| HY-S101 (`zyf`) | `HY-S101_Frameo_20260826` | 106 | byte-clean | same | [hy-s101-rk3326.md](hy-s101-rk3326.md) |
+| AMABOO GBZK-Y1000 10.1" / 15.6" | `RAM_S101_20251229` / `RAM_S101_15.6_20260314` | 106 | not recorded / adds CR | same | [amaboo-gbzk-y1000.md](amaboo-gbzk-y1000.md) |
+
 ## Verified firmware backup
 
 - Transport probe: a 4 KiB read of boot through `adb exec-out "su 0 dd ..."` arrived as exactly
@@ -168,6 +182,15 @@ Apple silicon, USB ADB only.
 - **Boot animation:** `/system/media/bootanimation.zip` holds four PNG parts at 870×432 on
   white. `/oem` is a separate ext4 partition with no `media/` folder. `/system` mounts straight
   from `rknand0p11`, with no dm-verity device, although `ro.boot.veritymode` reads `enforcing`.
+
+### Another Dxmart unit (2026-10-22, Windows)
+
+Reported by @TakalNL in [#233](https://github.com/wesbos/photo-frame-dashboard/pull/233), bought from
+[Amazon.nl B0DNMGKW2H](https://www.amazon.nl/dp/B0DNMGKW2H). Same firmware, fingerprint, partition
+map and boot hash. A 64 MiB read stalled 832 MiB into `system`. Reading the rest in 8 MiB chunks with
+a 100 ms pause finished it, and all 16 regions matched independent device reads. Platform-Tools
+37.0.1 on a rear motherboard USB port worked; earlier attempts through a front case port and a hub
+were unreliable. The causes were not isolated.
 
 ## Third unit: moonka ZN-DP1002 (2026-10-22, Linux)
 
