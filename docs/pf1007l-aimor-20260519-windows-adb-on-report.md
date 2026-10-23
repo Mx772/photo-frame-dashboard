@@ -38,13 +38,15 @@ Host: Windows 11, Git Bash, platform-tools adb
 - Boot partition at sector 172032. Boot image SHA-256 (31,028 sectors):
   `9a6e2456952f3dc2b99e64ea021321397bdc824364b5c8b42f503f847261630a`, the known `20260519` image.
 - `UDISK` (`/data`) is `mmcblk0p1`, starting at sector 4,366,336.
-- Android's `/sys/block/mmcblk0/size` reported **30,769,152** sectors. The firmware table lists
-  30,777,344 for this firmware; those figures came from U-Boot `ums`. We did not enter U-Boot, so
-  whether this is a different eMMC or the same chip counted differently is not known.
+- Android's `/sys/block/mmcblk0/size` reported **30,769,152** sectors, 8,192 (4 MiB) fewer than the
+  30,777,344 that Android reported on other larger-eMMC units
+  ([January ADB-on report](pf1007l-windows-20260113-adb-on-report.md#full-emmc-backup-over-adb)).
+  Whether this is a different eMMC is not known.
 - Backup over root ADB: everything before `UDISK` (2,235,564,032 bytes) with `/sbin/busybox dd`,
   stream SHA-256 compared with the gzip readback, then env, boot, system and recovery re-read and
   compared. Also `mmcblk0boot0`, `mmcblk0boot1`, `mmcblk0gp0`, each read twice, and a tar of `/data`.
-  About 8 minutes over USB 2.
+  About 8 minutes over USB 2. This is not a full raw eMMC image (`UDISK` was saved as a file tar),
+  so it does not meet the repository's backup rule.
 
 ### Before going online
 

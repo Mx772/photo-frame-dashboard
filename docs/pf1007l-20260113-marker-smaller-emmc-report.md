@@ -143,7 +143,4 @@ platform android-34). The `temurin@17` cask needs `sudo`, so the formula was use
   were still set. Whether the floating buttons appeared was not checked.
 - Log lines from just after boot were dated `01-01` until network time arrived (see the clock fix in
   [pf1007l-boot-fixes.md](pf1007l-boot-fixes.md), not installed here).
-- The DHCP address changed at every boot. The MAC address was not checked. The product name
-  (`astar_m86_8723cs`) points to a Realtek RTL8723CS rather than the AIC8800 noted in
-  [pf1007l-start-here.md](pf1007l-start-here.md#known-firmware-and-units); the chip was not
-  confirmed.
+- The DHCP address changed at every boot. The MAC address was not checked.

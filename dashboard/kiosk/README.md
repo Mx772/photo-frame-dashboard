@@ -143,8 +143,9 @@ whenever you leave Home HQ, the firmware may be killing every app you switch awa
 The grant survives updates. To turn the buttons off for good, revoke it first
 (`pm revoke` with the same arguments), then disable the service in Accessibility settings.
 
-January `20260113` firmware was also observed keeping a navigation service in the selected
-list but resetting `accessibility_enabled` to `0` after boot. With the same optional grant,
+January `20260113` and May `20260529` firmware were also observed keeping a navigation service in
+the selected list but resetting `accessibility_enabled` to `0` after boot. On `20260529` (#234)
+the buttons came back on every boot once Home HQ was the Home app (see [Start at boot](#start-at-boot)). With the same optional grant,
 Home HQ repairs either state when it starts, without rewriting an already selected list.
 This reset was measured with a separate navigation app; the Home HQ change has host regression
 coverage but has not been installed on that unit. See the

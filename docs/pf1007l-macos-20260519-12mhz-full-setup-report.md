@@ -82,7 +82,7 @@ The router blocked the frame while it booted. Then, in this order:
 
 - The time zone shipped as `Europe/Amsterdam`, not `America/New_York` (European listing).
 - The clock read 1 January 1970 until the frame reached the network; `auto_time` was already 1.
-- The "Smart Devices" Wi-Fi this frame joined turned out to be the same subnet as the owner's
+- The separate IoT Wi-Fi network this frame joined turned out to be the same subnet as the owner's
   main network. A separate Wi-Fi name is not network isolation: check the address the frame gets.
 
 ## Not done

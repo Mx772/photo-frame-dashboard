@@ -4,9 +4,8 @@ One USB-C-only PF1007 on `V10-1680.0.20260529` (AiMOR 6.0.78), taken from stock 
 dashboard kiosk **entirely from native Windows** — `adb` and Python run on Windows; WSL
 Ubuntu was used only to build the kiosk APK. This confirms the existing T3c +
 `persist.sys.usb.config` route for this firmware ([#117](https://github.com/wesbos/photo-frame-dashboard/issues/117),
-[#163](https://github.com/wesbos/photo-frame-dashboard/issues/163)) and adds the downstream
-full-setup steps (backup, WebView 106, CA roots, launcher, floating navigation, kiosk as Home)
-with several Windows- and device-specific gotchas that are not yet written down.
+[#163](https://github.com/wesbos/photo-frame-dashboard/issues/163)), and records two new findings: floating navigation on this firmware needs the kiosk to be Home,
+and a PowerShell redirect corrupts binary ADB output.
 
 No boot partition was written. Nothing private is included (no serial, MAC, IP, Wi-Fi details or
 whole-eMMC hash).
@@ -46,41 +45,10 @@ First failed step and its exact output: none (T3 and T3b failed as expected for 
   (confirmed again here, as in #117). After that the DNS entry was cleared and the frame taken off
   Wi-Fi; nothing else depends on the vendor channel.
 
-## Full backup over USB root ADB — a verification caveat
+## Backup and setup
 
-Backed up the whole eMMC in 512 MiB chunks with the frame's `/sbin/busybox dd` (stock `dd` returns
-0 bytes past 2 GiB on this firmware). Worth recording for anyone scripting a backup check:
-
-- A **whole-device checksum comparison is not a valid integrity test on a live, mounted frame.**
-  Re-reading `/dev/block/mmcblk0` a second time (e.g. `busybox md5sum`) will not match the captured
-  image, because Android keeps writing the mutable partitions (`UDISK`, `cache`, `metadata`, `alog`,
-  `media_data`) during the ~1 h read. This is expected, not corruption.
-- Verify transfer integrity on the **static** partitions instead: an independent re-read of
-  `bootloader`, `env`, `boot`, `system`, `misc`, `recovery` matched the captured image byte-for-byte,
-  the boot image's 31,028-sector SHA-256 matched the row above, and a gzip decompress-readback matched.
-  The mutable partitions are only ever a best-effort snapshot over ADB.
-
-## WebView 106 swap — two device notes
-
-Followed the `/system` swap in `allwinner-a33-pf1007l.md` section 6 (stock WebView was 44.0.2403.119).
-After reboot `com.android.webview` reported `106.0.5249.126`, logcat showed
-`cr_WVCFactoryProvider: Loaded version=106.0.5249.126 isBundle=false` with no `dlopen` errors, and the
-kiosk rendered. Two things specific to this unit:
-
-- **`find -exec ... {} +` silently does nothing** here — the device's `find` takes `\;`, not `+`.
-  The guide's `find $NEW -type f -exec chmod 644 {} +` left files at `0666`/dirs at `0777`; set the
-  modes with explicit `chmod` on the paths instead and re-check `ls -l`.
-- Chromium logs `eglChooseConfig failed ... EGL_BAD_ATTRIBUTE` (Mali-400, old GL driver) and falls
-  back to **software rendering**. The dashboard still renders fine; keep heavy continuous animation off.
-
-## CA roots
-
-The demo host `home-dashboard.wesbos.workers.dev` chains leaf -> GTS WE1 -> **GTS Root R4** ->
-GlobalSign, so **GTS Root R4** (`5acf816d.0`) is the anchor the old store is missing. Added GTS R1,
-GTS R4 and ISRG Root X1 per the [Uhale guide](si006-uhale.md) table (pinned DER SHA-256), mode 0644,
-root:root. **SELinux is Disabled** on this unit (the existing cacerts show as `unlabeled`), so no
-context fix was needed. After restarting the kiosk the hosted dashboard loaded over HTTPS with no
-cert error.
+Full eMMC backup in 512 MiB `/sbin/busybox dd` chunks; static partitions re-read and matched.
+WebView 106 and the three CA roots were installed as in the guides; the hosted demo loaded.
 
 ## Floating navigation needs the kiosk to be Home
 
@@ -96,17 +64,11 @@ app. One finding worth adding to the kiosk README's PF1007L note:
   (Android 6 chooser -> Home HQ -> Always) fixed it: Home HQ launches at boot, re-arms the service,
   and the buttons are present on every boot. Reboot-confirmed.
 
-## Windows host tips
+## Windows host tip
 
-- **Byte-exact `adb exec-out` capture:** PowerShell `Start-Process -RedirectStandardOutput` corrupted
-  the binary (a 1 MiB read came back as 826 bytes). `cmd /c "adb ... exec-out \"...\" > file"` and
-  Python `subprocess` with `stdout=<file handle>` were both byte-exact.
-- **Git Bash path mangling:** MSYS rewrites a bare `/data/...` argument to a Windows path, so
-  `adb push <host> /data/local/tmp/x` fails with `remote No such file or directory`. Set
-  `MSYS_NO_PATHCONV=1` (command strings with spaces, like `adb shell "busybox dd ... "`, are unaffected).
-- Kiosk build toolchain on Windows via WSL with **no sudo**: a portable setup worked — `openjdk-17`
-  from apt, then Android `cmdline-tools` + `build-tools;34.0.0` + `platforms;android-34` unpacked under
-  `~/android-sdk`, then `ANDROID_HOME=~/android-sdk bash dashboard/kiosk/build.sh`.
+PowerShell `Start-Process -RedirectStandardOutput` corrupted `adb exec-out` binary output (a 1 MiB
+read came back as 826 bytes). `cmd /c "adb ... exec-out \"...\" > file"` and Python `subprocess`
+with `stdout=<file handle>` were both byte-exact.
 
 ## Result
 
