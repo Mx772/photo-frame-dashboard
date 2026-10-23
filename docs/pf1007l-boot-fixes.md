@@ -47,16 +47,20 @@ October 2026, on a 2 A wall supply:
   in more than 60 later boots. Its cause is unknown.
 - Observed on other units, one or a few boots each: `check`, `apply` and `verify` passed on January
   `20260113` (#137, #164, #172, #179), April `20260416`
-  ([report](pf1007l-macos-20260416-report.md#boot-fixes)) and May `20260519`
+  ([macOS report](pf1007l-macos-20260416-report.md#boot-fixes),
+  [Linux report](pf1007l-linux-20260416-hotspot-report.md#boot-fixes)) and May `20260519`
   ([#204](pf1007l-aimor-20260519-windows-adb-on-report.md#setup-that-worked) from Windows Git Bash,
   `check` and `apply` only; [#227](pf1007l-macos-20260519-12mhz-full-setup-report.md), Wi-Fi at 42.6 s;
   #240), with `WIFI_DEFER=1` and `POWER_FIX=0`.
-  Wi-Fi started at 39.9 to 44 s uptime. Repeated and power-cut boots were not tested on most of them.
+  Wi-Fi started at 39.9 to 44 s uptime. Repeated and power-cut boots were not tested on most of them;
+  the Linux `20260416` unit also reached the page by itself on a wall charger, and again after an
+  unplug and replug.
 - Observed before the fixes, the same freeze on other units: a January unit went dark about 30 s
   into a boot from a laptop port (#137); a January unit on a 5 W USB-A charger stayed black after
   the boot logo (#164); an April unit boot-looped on a Mac port when Wi-Fi started (#187).
-- Observed: a TP-Link Deco did not answer NTP (#190); `NTP_SERVER=time.google.com` worked there
-  and on #137, #164 and #172.
+- Observed: a TP-Link Deco (#190) and an Orange Livebox 6
+  ([Linux hotspot report](pf1007l-linux-20260416-hotspot-report.md#boot-fixes)) did not answer NTP;
+  `NTP_SERVER=time.google.com` worked there and on #137, #164 and #172.
 - Guess: the Wi-Fi start freeze is a power problem (current spike with no battery), not a driver
   bug. The kernel log ends at different points of the Wi-Fi start, and the frame survived the
   same start when it ran after boot.
