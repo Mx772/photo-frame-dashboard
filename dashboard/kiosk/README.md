@@ -11,6 +11,24 @@ closer fingers as one touch.
 - **Reload dashboard** reloads the current URL.
 - **Back to dashboard** dismisses the controls.
 
+## Optional single-tap Menu button
+
+On panels where the two-finger gesture is unreliable, enable a native **Menu** button:
+
+```sh
+adb shell am start -n com.wesbos.homehq/.MainActivity --ez menu_button true
+```
+
+It opens the same controls with one tap. The preference survives later launches; the button
+is hidden by default. Turn it off with the same command and `--ez menu_button false`.
+The two-finger gesture remains available in either mode.
+
+The button occupies 72×48 dp, with 12 dp margins at the bottom left, above both the page and
+the offline screen. Leave that area clear in your dashboard when enabling it. It needs no
+root or additional permissions. The button and physical single-tap interaction were tested
+in a local adaptation on the [QCREA YYD-1156](../../docs/qcrea-yyd-1156.md); the saved opt-in is
+the shared-kiosk version of that adaptation.
+
 ## Dashboard URL
 
 The kiosk opens the hosted demo dashboard by default. To show your own, save its URL once:
