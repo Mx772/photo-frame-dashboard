@@ -9,7 +9,7 @@
 # dead, retry after 60 s, doubling to every 10 min.
 CONF=/data/local/frame-boot.conf
 [ -r $CONF ] && . $CONF
-bad=0
+bad=-60   # frame-wifidefer.sh starts Wi-Fi after boot completes
 tries=0
 next=0
 while true; do
@@ -27,9 +27,12 @@ while true; do
         # grep, not sed: toybox sed on this firmware mangles s/^wpa_state=//.
         st=$(wpa_cli -p /data/misc/wifi/sockets -i wlan0 status 2> /dev/null | grep '^wpa_state=')
         st=${st#wpa_state=}
-        # A missing state also means dead, but only while Wi-Fi is switched on (settings is slow: ask last).
+        # A missing state also means dead, but only while Wi-Fi is switched on and wlan0 has no
+        # address (settings is slow: ask last).
         case "$st" in
-            ''|INTERFACE_DISABLED) [ "$(settings get global wifi_on 2> /dev/null)" = 1 ] || st=off ;;
+            ''|INTERFACE_DISABLED)
+                ip -4 addr show wlan0 2> /dev/null | grep -q inet && st=up ||
+                    [ "$(settings get global wifi_on 2> /dev/null)" = 1 ] || st=off ;;
         esac
     fi
     case "$st" in
