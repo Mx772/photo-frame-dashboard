@@ -8,6 +8,8 @@ closer fingers as one touch.
   If none is available, it opens Android Settings.
 - **Android settings** opens the device's Settings app.
 - **Wi-Fi settings** opens Android's Wi-Fi list directly.
+- **Kiosk settings** edits the saved URL, orientation, Menu button and brightness schedule on
+  the frame (see [Kiosk settings](#kiosk-settings)).
 - **Reload dashboard** reloads the current URL.
 - **Back to dashboard** dismisses the controls.
 
@@ -114,6 +116,45 @@ The setting survives later launches and reboots. An unknown value is logged and 
 frame without an accelerometer, `portrait` and `landscape` still work but don't flip, and `auto`
 stays put. Your page has to fit the new shape; on a 1280×800 frame, portrait is 800×1280.
 Tested on a Dragon Touch Classic10 Charm (Android 6, `mir3da` accelerometer).
+
+## Kiosk settings
+
+**Kiosk settings** in the controls opens a form with the settings that otherwise need `adb`:
+
+- **Dashboard URL**: must start with `http://` or `https://`.
+- **Orientation**: Landscape, Portrait or Auto (see [Orientation](#orientation)).
+- **Menu button**: whether the single-tap Menu button is shown.
+- **Brightness schedule**: see [Brightness schedule](#brightness-schedule). Empty uses Android's brightness.
+
+**Save** checks the URL and schedule first; a bad entry is flagged and the form stays open. Saving
+does the same as the matching `am start` extras, and reloads the dashboard only if the URL changed.
+Anyone standing at the frame can open the controls and change these, the same as they can change
+Android settings.
+
+## Brightness schedule
+
+Dim the frame at night without touching Android's brightness. Save a schedule once:
+
+```sh
+adb shell am start -n com.wesbos.homehq/.MainActivity --es brightness_schedule "07:00=100,22:00=10"
+```
+
+- Format: comma-separated `HH:MM=percent` entries. 24-hour time (`0:00` to `23:59`; the hour may
+  have one digit, the minutes need two) and a percent from 1 to 100. Spaces are allowed. Order
+  doesn't matter; the same time twice is invalid.
+- Each entry applies from its time until the next one. Before the first entry of the day, the last
+  entry (from yesterday) still applies. One entry (`00:00=60`) is a constant brightness.
+- `--es brightness_schedule ""` or `off` removes the schedule. An invalid value is logged and
+  ignored, keeping the saved one.
+- Time is the frame's local time. The schedule is checked every minute and when the time or time
+  zone changes.
+- Clock rule: frames without a clock battery boot in 1970 until network time arrives. Until the
+  clock reads 2024 or later, the schedule is not applied (Android's brightness is used) and one
+  line is logged; it takes effect once the time is set.
+
+This only sets the brightness of the kiosk's window. Other apps and Android's own brightness
+setting are unaffected, and it needs no permissions. Percent is the window's brightness level; 1%
+is not "off" on every panel, and some backlights stay clearly lit at 1%.
 
 ## Screen density
 
@@ -232,6 +273,7 @@ Host-only navigation regression checks need Python 3 and a JDK on `PATH`:
 
 ```sh
 python3 kiosk/test-navigation.py
+python3 kiosk/test-brightness.py
 ```
 
 Run from `dashboard/`. The test compiles the actual repair method with settings and

@@ -7,6 +7,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
@@ -22,6 +23,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.provider.Settings;
+import android.text.InputType;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -36,13 +38,20 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.Arrays;
+import java.util.Calendar;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -53,6 +62,10 @@ import java.util.Map;
  * - Controls: hold two fingers still on the screen for 1.5s for launcher/settings/Wi-Fi/reload.
  *   Optional single-tap Menu button: launch with --ez menu_button true (false removes it).
  * - Orientation (saved): --es orientation landscape (default), portrait or auto.
+ * - Brightness schedule (saved): --es brightness_schedule "07:00=100,22:00=10" ("" or off clears it).
+ *   Only this window's brightness changes; needs a valid clock.
+ * - Kiosk settings: the controls' "Kiosk settings" screen edits the URL, orientation, Menu button
+ *   and brightness schedule on the frame, saving them as the extras above do.
  * - Offline: a failed page load shows a native screen instead of WebView's error page (which
  *   prints the full URL, including any token in it). With no Wi-Fi it offers Wi-Fi settings.
  * - Remote debugging is OFF unless launched with the debug extra (every app on this device
@@ -75,6 +88,9 @@ public class MainActivity extends Activity {
   static final String PREF_URL = "url";
   static final String PREF_MENU_BUTTON = "menu_button";
   static final String PREF_ORIENTATION = "orientation";
+  static final String PREF_BRIGHTNESS_SCHEDULE = "brightness_schedule";
+  // Frames without a clock battery boot in 1970 until network time arrives.
+  static final long MIN_VALID_CLOCK_MS = 1704067200000L; // 2024-01-01 UTC
   static final long EXIT_HOLD_MS = 1500;
   static final int CANCEL_POINTER_IDS = 10; // touch ids 0-9
   static final long RETRY_MS = 5000;
@@ -115,6 +131,9 @@ public class MainActivity extends Activity {
   private long portalSince;
   private LinearLayout portalBar;
   private TextView portalText;
+  // Last brightness percent applied (-1: Android's own); -2 until the first apply.
+  private int appliedBrightness = -2;
+  private boolean clockWarned;
 
   private final Runnable retry = new Runnable() {
     @Override
@@ -153,6 +172,15 @@ public class MainActivity extends Activity {
     }
   };
 
+  private final BroadcastReceiver clockChange = new BroadcastReceiver() {
+    @Override
+    public void onReceive(Context context, Intent intent) {
+      refreshBrightness();
+    }
+  };
+
+  private final Runnable brightnessTick = this::refreshBrightness;
+
   // While the sign-in page is up, check every few seconds whether the frame is online yet.
   private final Runnable portalCheck = this::checkPortal;
 
@@ -165,11 +193,12 @@ public class MainActivity extends Activity {
       cancelPageTouches();
       new AlertDialog.Builder(MainActivity.this)
           .setTitle("Home HQ")
-          .setItems(new String[] {"Open launcher", "Android settings", "Wi-Fi settings", "Reload dashboard"},
+          .setItems(new String[] {"Open launcher", "Android settings", "Wi-Fi settings", "Kiosk settings", "Reload dashboard"},
               (dialog, which) -> {
                 if (which == 0) openLauncher();
                 else if (which == 1) startActivity(new Intent(Settings.ACTION_SETTINGS));
                 else if (which == 2) openWifiSettings();
+                else if (which == 3) showKioskSettings();
                 else web.reload();
               })
           .setNegativeButton("Back to dashboard", null).show();
@@ -182,6 +211,7 @@ public class MainActivity extends Activity {
     applyDebugFlag(getIntent());
     applyHomeFlag(getIntent());
     applyOrientation(getIntent());
+    applyBrightnessSchedule(getIntent());
     keepNavigationEnabled();
     getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
         | WindowManager.LayoutParams.FLAG_FULLSCREEN);
@@ -306,12 +336,16 @@ public class MainActivity extends Activity {
     IntentFilter connectivity = new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION);
     connectivity.addAction(Intent.ACTION_TIME_CHANGED); // network time arrived after a power cut
     registerReceiver(networkChange, connectivity);
+    IntentFilter clock = new IntentFilter(Intent.ACTION_TIME_CHANGED);
+    clock.addAction(Intent.ACTION_TIMEZONE_CHANGED);
+    registerReceiver(clockChange, clock);
   }
 
   @Override
   protected void onResume() {
     super.onResume();
     NavigationService.setDashboardVisible(true);
+    refreshBrightness();
   }
 
   @Override
@@ -329,15 +363,19 @@ public class MainActivity extends Activity {
     applyHomeFlag(intent);
     applyMenuButtonFlag(intent);
     applyOrientation(intent);
+    applyBrightnessSchedule(intent);
     String url = urlFrom(intent);
-    if (url != null) {
-      closePortal();
-      handler.removeCallbacks(retry);
-      handler.removeCallbacks(stall);
-      retryPending = false;
-      retryUrl = url;
-      load(url);
-    }
+    if (url != null) openUrl(url);
+  }
+
+  /** Shows a new URL now: leaves the sign-in page and drops any queued retry of the old one. */
+  private void openUrl(String url) {
+    closePortal();
+    handler.removeCallbacks(retry);
+    handler.removeCallbacks(stall);
+    retryPending = false;
+    retryUrl = url;
+    load(url);
   }
 
   /** A "url" extra is saved for later launches. A VIEW link from another app is shown, not saved. */
@@ -345,14 +383,18 @@ public class MainActivity extends Activity {
     String saved = intent.getStringExtra(PREF_URL);
     if (saved == null) return intent.getDataString();
     // The activity is exported, so only save web URLs: never file:, content: or javascript:.
-    String scheme = Uri.parse(saved).getScheme();
-    if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) {
-      Log.w(TAG, "Ignoring non-web kiosk URL (scheme " + scheme + ")");
+    if (!isWebUrl(saved)) {
+      Log.w(TAG, "Ignoring non-web kiosk URL (scheme " + Uri.parse(saved).getScheme() + ")");
       return null;
     }
     getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(PREF_URL, saved).apply();
     Log.i(TAG, "Saved kiosk URL: " + forLog(saved));
     return saved;
+  }
+
+  static boolean isWebUrl(String url) {
+    String scheme = Uri.parse(url).getScheme();
+    return "http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme);
   }
 
   /**
@@ -728,6 +770,7 @@ public class MainActivity extends Activity {
   @Override
   protected void onDestroy() {
     unregisterReceiver(networkChange);
+    unregisterReceiver(clockChange);
     handler.removeCallbacksAndMessages(null);
     if (web != null) web.destroy();
     super.onDestroy();
@@ -775,6 +818,106 @@ public class MainActivity extends Activity {
     if ("auto".equals(value)) return ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR;
     return null;
   }
+
+  /**
+   * A saved brightness schedule. Only this window's brightness is overridden (no permission needed),
+   * so other apps and Android's own setting are untouched. An invalid value keeps the saved one.
+   */
+  private void applyBrightnessSchedule(Intent intent) {
+    if (intent != null && intent.hasExtra(PREF_BRIGHTNESS_SCHEDULE)) {
+      String value = intent.getStringExtra(PREF_BRIGHTNESS_SCHEDULE);
+      String v = value == null ? "" : value.trim();
+      SharedPreferences.Editor edit = getSharedPreferences(PREFS, MODE_PRIVATE).edit();
+      if (v.isEmpty() || v.equalsIgnoreCase("off")) {
+        edit.remove(PREF_BRIGHTNESS_SCHEDULE).apply();
+      } else if (!validBrightnessSchedule(v)) {
+        Log.w(TAG, "Invalid brightness schedule \"" + value
+            + "\"; use HH:MM=percent entries like 07:00=100,22:00=10 (percent 1-100)");
+      } else {
+        edit.putString(PREF_BRIGHTNESS_SCHEDULE, v).apply();
+      }
+    }
+    refreshBrightness();
+  }
+
+  /** Applies the schedule now and queues the next check just after the minute changes. */
+  private void refreshBrightness() {
+    String schedule = getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_BRIGHTNESS_SCHEDULE, "");
+    int percent = -1;
+    if (!schedule.isEmpty()) {
+      if (System.currentTimeMillis() < MIN_VALID_CLOCK_MS) {
+        if (!clockWarned) Log.w(TAG, "Clock not set yet, brightness schedule waits");
+        clockWarned = true;
+      } else {
+        clockWarned = false;
+        Calendar now = Calendar.getInstance();
+        percent = brightnessAt(schedule, now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE));
+      }
+    }
+    if (percent != appliedBrightness) {
+      WindowManager.LayoutParams lp = getWindow().getAttributes();
+      lp.screenBrightness = percent > 0 ? percent / 100f : WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
+      getWindow().setAttributes(lp);
+      appliedBrightness = percent;
+      Log.i(TAG, percent > 0 ? "Brightness " + percent + "% (schedule)" : "Brightness: Android default");
+    }
+    handler.removeCallbacks(brightnessTick);
+    handler.postDelayed(brightnessTick, 60000 - System.currentTimeMillis() % 60000 + 1000);
+  }
+
+  // Pure schedule logic, no Android types: test-brightness.py extracts everything between the markers.
+  // BEGIN brightness schedule
+  /** Parses "HH:MM=P,..." into {minuteOfDay, percent} pairs sorted by time; null if invalid. */
+  static int[][] parseBrightnessSchedule(String s) {
+    if (s == null) return null;
+    String[] entries = s.split(",", -1);
+    int[][] out = new int[entries.length][];
+    for (int i = 0; i < entries.length; i++) {
+      String[] parts = entries[i].split("=", -1);
+      if (parts.length != 2) return null;
+      String time = parts[0].trim(), pct = parts[1].trim();
+      int colon = time.indexOf(':');
+      if (colon < 1 || colon > 2 || time.length() - colon - 1 != 2) return null;
+      int hour = digits(time.substring(0, colon), 2), minute = digits(time.substring(colon + 1), 2);
+      int percent = digits(pct, 3);
+      if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || percent < 1 || percent > 100) return null;
+      out[i] = new int[] {hour * 60 + minute, percent};
+    }
+    Arrays.sort(out, (a, b) -> Integer.compare(a[0], b[0]));
+    for (int i = 1; i < out.length; i++) {
+      if (out[i][0] == out[i - 1][0]) return null; // same time twice
+    }
+    return out;
+  }
+
+  /** The number in s (ASCII digits only, at most maxLen of them), or -1. */
+  static int digits(String s, int maxLen) {
+    if (s.isEmpty() || s.length() > maxLen) return -1;
+    int n = 0;
+    for (int i = 0; i < s.length(); i++) {
+      char c = s.charAt(i);
+      if (c < '0' || c > '9') return -1;
+      n = n * 10 + (c - '0');
+    }
+    return n;
+  }
+
+  static boolean validBrightnessSchedule(String s) {
+    return parseBrightnessSchedule(s) != null;
+  }
+
+  /** Brightness percent at minuteOfDay, or -1 for an empty, "off" or invalid schedule. */
+  static int brightnessAt(String schedule, int minuteOfDay) {
+    int[][] entries = parseBrightnessSchedule(schedule);
+    if (entries == null) return -1;
+    // Before the first entry, yesterday's last one is still in force.
+    int percent = entries[entries.length - 1][1];
+    for (int[] e : entries) {
+      if (e[0] <= minuteOfDay) percent = e[1];
+    }
+    return percent;
+  }
+  // END brightness schedule
 
   /** Turns the Home alias on or off. The shell can't enable a component of a release app. */
   private void applyHomeFlag(Intent intent) {
@@ -830,6 +973,108 @@ public class MainActivity extends Activity {
         break;
     }
     return super.dispatchTouchEvent(e);
+  }
+
+  /** Edits the saved settings on the frame. Saving applies them exactly as the launch extras do. */
+  private void showKioskSettings() {
+    cancelPageTouches();
+    SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+    LinearLayout form = new LinearLayout(this);
+    form.setOrientation(LinearLayout.VERTICAL);
+    form.setPadding(dp(24), dp(8), dp(24), dp(8));
+
+    form.addView(settingLabel("Dashboard URL"));
+    EditText urlField = new EditText(this);
+    urlField.setSingleLine(true);
+    urlField.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+    urlField.setText(savedUrl());
+    form.addView(urlField);
+
+    form.addView(settingLabel("Orientation"));
+    String[] orientations = {"landscape", "portrait", "auto"};
+    String[] orientationNames = {"Landscape", "Portrait", "Auto"};
+    String savedOrientation = prefs.getString(PREF_ORIENTATION, "landscape");
+    RadioGroup orientationGroup = new RadioGroup(this);
+    orientationGroup.setOrientation(RadioGroup.VERTICAL);
+    RadioButton[] radios = new RadioButton[orientations.length];
+    for (int i = 0; i < radios.length; i++) {
+      radios[i] = new RadioButton(this);
+      radios[i].setId(View.generateViewId());
+      radios[i].setText(orientationNames[i]);
+      orientationGroup.addView(radios[i]);
+      if (orientations[i].equals(savedOrientation)) radios[i].setChecked(true);
+    }
+    if (orientationGroup.getCheckedRadioButtonId() == -1) radios[0].setChecked(true);
+    form.addView(orientationGroup);
+
+    CheckBox menuBox = new CheckBox(this);
+    menuBox.setText("Menu button (single tap opens these controls)");
+    menuBox.setChecked(prefs.getBoolean(PREF_MENU_BUTTON, false));
+    LinearLayout.LayoutParams menuParams = new LinearLayout.LayoutParams(
+        LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+    menuParams.topMargin = dp(16);
+    form.addView(menuBox, menuParams);
+
+    form.addView(settingLabel("Brightness schedule"));
+    EditText scheduleField = new EditText(this);
+    scheduleField.setSingleLine(true);
+    scheduleField.setHint("07:00=100, 22:00=10");
+    scheduleField.setText(prefs.getString(PREF_BRIGHTNESS_SCHEDULE, ""));
+    form.addView(scheduleField);
+    TextView help = new TextView(this);
+    help.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+    help.setText("24-hour times and brightness 1\u2013100%. Leave empty for Android's brightness.");
+    form.addView(help);
+
+    ScrollView scroll = new ScrollView(this);
+    scroll.addView(form);
+    AlertDialog dialog = new AlertDialog.Builder(this)
+        .setTitle("Kiosk settings")
+        .setView(scroll)
+        .setPositiveButton("Save", null) // real handler below, so invalid input keeps the dialog open
+        .setNegativeButton("Cancel", null).create();
+    dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+    dialog.show();
+    dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+      String url = urlField.getText().toString().trim();
+      String schedule = scheduleField.getText().toString().trim();
+      boolean ok = true;
+      if (!isWebUrl(url)) {
+        urlField.setError("Enter an http:// or https:// address");
+        ok = false;
+      }
+      if (!schedule.isEmpty() && !validBrightnessSchedule(schedule)) {
+        scheduleField.setError("Use HH:MM=percent, like 07:00=100, 22:00=10");
+        ok = false;
+      }
+      if (!ok) return;
+      int checked = orientationGroup.getCheckedRadioButtonId();
+      String orientation = "landscape";
+      for (int i = 0; i < radios.length; i++) {
+        if (radios[i].getId() == checked) orientation = orientations[i];
+      }
+      Intent settings = new Intent()
+          .putExtra(PREF_ORIENTATION, orientation)
+          .putExtra(PREF_MENU_BUTTON, menuBox.isChecked())
+          .putExtra(PREF_BRIGHTNESS_SCHEDULE, schedule);
+      applyOrientation(settings);
+      applyMenuButtonFlag(settings);
+      applyBrightnessSchedule(settings);
+      if (!url.equals(savedUrl())) {
+        String saved = urlFrom(new Intent().putExtra(PREF_URL, url));
+        if (saved != null) openUrl(saved);
+      }
+      Log.i(TAG, "Kiosk settings saved");
+      dialog.dismiss();
+    });
+  }
+
+  private TextView settingLabel(String text) {
+    TextView label = new TextView(this);
+    label.setText(text);
+    label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+    label.setPadding(0, dp(16), 0, 0);
+    return label;
   }
 
   private void cancelExit() {
