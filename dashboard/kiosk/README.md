@@ -96,6 +96,25 @@ fails to load at boot because Wi-Fi isn't up yet, the kiosk keeps retrying. In t
 **Open launcher** skips the kiosk and opens another Home app. To undo, pick another Home app in
 Settings → Apps → Default apps, then run the first command with `--ez home false`.
 
+## Orientation
+
+The kiosk runs in landscape by default, either way up. For a frame hung in portrait, save a
+different orientation once:
+
+```sh
+adb shell am start -n com.wesbos.homehq/.MainActivity --es orientation portrait
+```
+
+- `landscape` (the default): landscape, turned the right way up by the accelerometer.
+- `portrait`: portrait, either way up.
+- `auto`: follows the accelerometer in all four directions. Android's rotation lock is ignored,
+  because frames without SystemUI have no way to change it.
+
+The setting survives later launches and reboots. An unknown value is logged and ignored. On a
+frame without an accelerometer, `portrait` and `landscape` still work but don't flip, and `auto`
+stays put. Your page has to fit the new shape; on a 1280×800 frame, portrait is 800×1280.
+Tested on a Dragon Touch Classic10 Charm (Android 6, `mir3da` accelerometer).
+
 ## Screen density
 
 The dashboard is laid out for 1280×800 at density 160. On wider screens, such as 1920×1080 frames,

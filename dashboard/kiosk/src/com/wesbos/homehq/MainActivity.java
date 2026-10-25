@@ -7,6 +7,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
@@ -51,6 +52,7 @@ import java.util.Map;
  * - Immersive mode hides the status + navigation bars (true 1280x800).
  * - Controls: hold two fingers still on the screen for 1.5s for launcher/settings/Wi-Fi/reload.
  *   Optional single-tap Menu button: launch with --ez menu_button true (false removes it).
+ * - Orientation (saved): --es orientation landscape (default), portrait or auto.
  * - Offline: a failed page load shows a native screen instead of WebView's error page (which
  *   prints the full URL, including any token in it). With no Wi-Fi it offers Wi-Fi settings.
  * - Remote debugging is OFF unless launched with the debug extra (every app on this device
@@ -72,6 +74,7 @@ public class MainActivity extends Activity {
   static final String PREFS = "kiosk";
   static final String PREF_URL = "url";
   static final String PREF_MENU_BUTTON = "menu_button";
+  static final String PREF_ORIENTATION = "orientation";
   static final long EXIT_HOLD_MS = 1500;
   static final int CANCEL_POINTER_IDS = 10; // touch ids 0-9
   static final long RETRY_MS = 5000;
@@ -178,6 +181,7 @@ public class MainActivity extends Activity {
     super.onCreate(state);
     applyDebugFlag(getIntent());
     applyHomeFlag(getIntent());
+    applyOrientation(getIntent());
     keepNavigationEnabled();
     getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
         | WindowManager.LayoutParams.FLAG_FULLSCREEN);
@@ -324,6 +328,7 @@ public class MainActivity extends Activity {
     applyDebugFlag(intent);
     applyHomeFlag(intent);
     applyMenuButtonFlag(intent);
+    applyOrientation(intent);
     String url = urlFrom(intent);
     if (url != null) {
       closePortal();
@@ -743,6 +748,32 @@ public class MainActivity extends Activity {
     }
     menuButton.setVisibility(getSharedPreferences(PREFS, MODE_PRIVATE)
         .getBoolean(PREF_MENU_BUTTON, false) ? View.VISIBLE : View.GONE);
+  }
+
+  /**
+   * A saved orientation for frames hung in portrait. The manifest's sensorLandscape stays the
+   * default, so frames that never set it don't change. "auto" follows the accelerometer and
+   * ignores Android's rotation lock, which frames without SystemUI have no way to change.
+   */
+  private void applyOrientation(Intent intent) {
+    if (intent != null && intent.hasExtra(PREF_ORIENTATION)) {
+      String value = intent.getStringExtra(PREF_ORIENTATION);
+      if (orientationFor(value) == null) {
+        Log.w(TAG, "Unknown orientation \"" + value + "\"; use landscape, portrait or auto");
+      } else {
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(PREF_ORIENTATION, value).apply();
+      }
+    }
+    Integer requested = orientationFor(getSharedPreferences(PREFS, MODE_PRIVATE)
+        .getString(PREF_ORIENTATION, "landscape"));
+    setRequestedOrientation(requested != null ? requested : ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+  }
+
+  static Integer orientationFor(String value) {
+    if ("landscape".equals(value)) return ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE;
+    if ("portrait".equals(value)) return ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT;
+    if ("auto".equals(value)) return ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR;
+    return null;
   }
 
   /** Turns the Home alias on or off. The shell can't enable a component of a release app. */
