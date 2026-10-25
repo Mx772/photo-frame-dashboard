@@ -5,7 +5,8 @@ macOS 27.0** with platform-tools 37.0.1. The owner bought it from
 [Amazon US, ASIN B0GTLPX5LC](https://www.amazon.com/dp/B0GTLPX5LC?tag=webo080-20). The listing identifies the
 purchase, not a guarantee that another unit has this firmware. A **second unit** from the same
 listing, with the same firmware, was set up on 24 October 2026 from Linux; it adds USB ADB through a
-Mini-B port, a `daemonsu` restart loop and a Frameo auto power-off. See
+Mini-B port, a `daemonsu` restart loop (stopped at every boot from `install-recovery.sh`) and a
+Frameo auto power-off. See
 [Second unit](#second-unit-usb-mini-b-and-a-daemonsu-restart-loop).
 
 **Verified result:** root ADB was reachable over Wi-Fi with no authorization prompt, and
@@ -197,14 +198,61 @@ The cause is the init service `daemonsu`, stuck at `init.svc.daemonsu=restarting
 starts it, it remounts `/system` several times (`EXT4-fs (mmcblk0p7): re-mounted` in `dmesg`) and
 reloads the SELinux policy (`auditd: type=1403 … policy loaded`), then exits with status 0 because
 the real `daemonsu` is already running, and init starts it again. It continued with Frameo and the
-updater disabled. So the frame is constantly writing `/system`'s superblock and journal.
+updater disabled. So the frame is constantly writing `/system`'s superblock and journal. The same
+loop is recorded on the [VTimes VT01001](vtimes-vt01001.md), the
+[Uhale A33](uhale-a33-astar-d7.md#backup-and-the-daemonsu-remount-loop) and the
+[SKYRHYME 168](skyrhyme-168.md); all three stopped it only until the next reboot.
 
 For the backup, `setprop ctl.stop daemonsu` stopped the loop until the next reboot. The root ADB
 shell is unaffected (`adbd` runs as root itself). The mount count then held still and `system`
 passed every check. **A `system` backup will not verify while the loop runs.** The first unit's
-16 MiB sample, taken 128 MiB into `system`, avoided the changing region. The loop comes back at
-every boot; a permanent fix would mean editing the init scripts in `boot` or `/system`, which was
-not attempted.
+16 MiB sample, taken 128 MiB into `system`, avoided the changing region.
+
+#### Stopping it at every boot without touching `boot`
+
+The service is defined in the boot ramdisk (`/init.rc:761`,
+`service daemonsu /system/xbin/daemonsu --auto-daemon`, no `oneshot`). Adding `oneshot` there is the
+clean fix, but a bad `boot` image on an A33 frame needs the FEL route in
+[allwinner-a33-boot-access.md](allwinner-a33-boot-access.md) to recover. Instead, the stop was added
+to a script init already runs once, as root, at every boot: `/init.rc:691`
+`service flash_recovery /system/bin/install-recovery.sh` (`class main`, `oneshot`). Nothing checks
+`/system` at boot on this firmware (no `verify` in `/fstab.sun8i`, no verity properties), and if
+the script fails, Android boots as before with the loop running.
+
+The vendor's lines were kept unchanged and this was appended:
+
+```sh
+i=0
+while [ "$(getprop init.svc.daemonsu)" != restarting ] && [ $i -lt 120 ]; do
+  sleep 1
+  i=$((i + 1))
+done
+if [ "$(getprop init.svc.daemonsu)" = restarting ]; then
+  setprop ctl.stop daemonsu
+  log -t daemonsu-fix "stopped daemonsu restart loop after ${i}s"
+else
+  log -t daemonsu-fix "daemonsu not restarting after ${i}s; left alone"
+fi
+```
+
+It waits for `restarting` so `daemonsu:master` is already up; the master keeps running after the
+stop. It runs in the foreground on purpose: when a service's main process exits, init kills its
+process group, so a background `&` would be killed with it.
+
+How it was written, with the loop already stopped by hand so nothing remounted `/system` mid-write:
+the new file was pushed to `/data/local/tmp`, checked with `sh -n`, the appended part run on its
+own once (it stopped the live loop), then in one shell: `mount -o remount,rw /system`,
+`cp -p install-recovery.sh install-recovery.sh.bak`, `cat new > install-recovery.sh` (keeps the
+inode, mode `0750` and the `u:object_r:install_recovery_exec:s0` label), `sync`,
+`mount -o remount,ro /system`, then the SHA-256 of both files checked.
+
+After a reboot: logcat showed `recovery: Recovery image already installed` (the vendor's check
+still runs) and then `daemonsu-fix: stopped daemonsu restart loop after 0s`, 6.7 s into boot.
+`init.svc.daemonsu` was `stopped`, `dmesg` had 4 `re-mounted` lines from the master's own start and
+none after, and over 60 s the `system` mount count and `session_write_kbytes` did not change. The
+kiosk came up as usual. **Undo:** remount `/system` read-write and
+`cat /system/bin/install-recovery.sh.bak > /system/bin/install-recovery.sh`. Tested across one
+reboot on one unit.
 
 ### Other differences from the first unit
 
@@ -234,6 +282,7 @@ not attempted.
 | `pm disable net.frameo.frame` (data **not** cleared) | `pm enable net.frameo.frame` |
 | `pm disable com.waophoto.fota` | `pm enable com.waophoto.fota` |
 | `setprop ctl.stop daemonsu` (until reboot) | reboot, or `setprop ctl.start daemonsu` |
+| `/system/bin/install-recovery.sh`: appended a boot-time stop for the `daemonsu` loop ([details](#stopping-it-at-every-boot-without-touching-boot)); original kept as `install-recovery.sh.bak` | remount `/system` rw, `cat install-recovery.sh.bak > install-recovery.sh` |
 | Kiosk installed, URL saved, `--ez home true`, `--es orientation portrait`, `WRITE_SECURE_SETTINGS` grant, navigation service enabled | as in [the first unit's table](#what-was-set-up-all-owner-approved-writes) |
 | `settings put global stay_on_while_plugged_in 7` (previous value `0`) | `settings put global stay_on_while_plugged_in 0` |
 
