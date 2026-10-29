@@ -41,6 +41,11 @@ started by init as root at every boot. This block checks the file, keeps the fir
 after the shebang only once, and always remounts `/system` read-only. **Not yet tested from a cold
 boot.**
 
+If `install-recovery.sh` is an init service (`service flash_recovery` in `init.rc`), init kills
+everything it started when the script exits, which may include this `&` line. The
+[Classic10 Charm](../../docs/dragontouch-classic10-charm.md#watchers-and-navigation-at-every-boot)
+starts the watchers last and keeps the script running instead; that was tested across reboots.
+
 ```sh
 adb pull /system/bin/install-recovery.sh install-recovery.sh.before-kioskwatch
 adb push scripts/kioskwatch/kioskwatch.sh /data/local/tmp/
