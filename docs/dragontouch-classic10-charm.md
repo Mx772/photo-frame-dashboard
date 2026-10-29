@@ -6,7 +6,8 @@ macOS 27.0** with platform-tools 37.0.1. The owner bought it from
 purchase, not a guarantee that another unit has this firmware. A **second unit** from the same
 listing, with the same firmware, was set up on 24 October 2026 from Linux; it adds USB ADB through a
 Mini-B port, a `daemonsu` restart loop (stopped at every boot from `install-recovery.sh`) and a
-Frameo auto power-off. See
+Frameo auto power-off. It also dropped off Wi-Fi and did not rejoin; boot-time watchers now
+restart Wi-Fi and return to the kiosk. See
 [Second unit](#second-unit-usb-mini-b-and-a-daemonsu-restart-loop).
 
 **Verified result:** root ADB was reachable over Wi-Fi with no authorization prompt, and
@@ -254,6 +255,81 @@ kiosk came up as usual. **Undo:** remount `/system` read-write and
 `cat /system/bin/install-recovery.sh.bak > /system/bin/install-recovery.sh`. Tested across one
 reboot on one unit.
 
+### Wi-Fi drops and does not rejoin
+
+Four days after setup the frame was found offline in the morning. It had been off Wi-Fi since at
+least 02:40, and for over 5 hours it scanned every 15 s, saw its saved network each time
+(`SCAN_RESULTS_EVENT … known=1` in `dumpsys wifi`) and never tried to join it. Tapping the network
+in Settings joined it at once. Signal was strong (-25 to -36 dBm). `networkHistory.txt` showed the
+network enabled (`AUTO_JOIN_STATUS: 0`), with 0 connect, authentication and IP failures and
+`VALIDATED_INTERNET_ACCESS: true`, so Android had not disabled it. The screen stays on
+(`mStayOn=true`), so this was not screen-off scanning. The reboot needed to recover ADB cleared
+the logs from the time of the drop, so the cause is unknown.
+
+Two side findings:
+
+- **Leaving Settings was impossible.** With `systemui` disabled there is no navigation bar, and
+  the navigation service was not bound (see [below](#other-differences-from-the-first-unit)).
+  `input keyevent KEYCODE_HOME` did nothing either, because `device_provisioned` and
+  `user_setup_complete` were both `0` (the setup wizard never finished), and Android ignores Home
+  until setup is complete. After `settings put global device_provisioned 1` and
+  `settings put secure user_setup_complete 1`, the Home key returned to the kiosk.
+- **Long `dumpsys wifi | grep` pipelines over Wi-Fi ADB** hung once and left `adbd` stuck
+  (`device offline`, port 5555 still accepting connections) until the frame was power cycled.
+  Read files such as `/data/misc/wifi/networkHistory.txt` instead.
+
+### Watchers and navigation at every boot
+
+Three additions run from the same `install-recovery.sh`, appended after the `daemonsu` block:
+
+- [`scripts/wifiwatch`](../scripts/wifiwatch/README.md) turns Wi-Fi off and on after 3 minutes
+  without an address. A test run of `svc wifi disable`, 5 s, `svc wifi enable` rejoined in about 4 s.
+- [`scripts/kioskwatch`](../scripts/kioskwatch/README.md) returns to the kiosk after 2 minutes
+  with no touch in another app. The touchscreen here is `gslX680`, the script's default.
+- A navigation fix: reinstalling the same kiosk APK binds the navigation service, so it is done
+  once at boot if the service is not bound.
+
+```sh
+# Android does not bind the kiosk's navigation service after a reboot on this unit, but
+# reinstalling the same APK binds it within seconds. Check once, 30 s after boot.
+(
+  while [ "$(getprop sys.boot_completed)" != 1 ]; do sleep 5; done
+  sleep 30
+  if dumpsys accessibility | grep -q "Home HQ navigation"; then
+    log -t navfix "navigation service bound; nothing to do"
+  else
+    apk=$(pm path com.wesbos.homehq)
+    # chmod: this script's umask leaves the copy unreadable to the package manager.
+    cp "${apk#package:}" /data/local/tmp/navfix.apk && chmod 0644 /data/local/tmp/navfix.apk
+    log -t navfix "navigation service not bound, reinstalling ${apk#package:}: $(pm install -r /data/local/tmp/navfix.apk 2>&1)"
+    rm -f /data/local/tmp/navfix.apk
+  fi
+) &
+
+# Watchers, until shutdown: kioskwatch returns to the kiosk after 2 minutes with no touch in
+# another app; wifiwatch turns Wi-Fi off and on if it has no address for 3 minutes. Last and in
+# the foreground for the same reason as above.
+/system/bin/sh /system/bin/kioskwatch.sh &
+exec /system/bin/sh /system/bin/wifiwatch.sh
+```
+
+`kioskwatch.sh` and `wifiwatch.sh` were copied to `/system/bin` (mode `0755`). Because init kills
+the service's process group when the script exits, the script never exits: `exec` turns it into
+`wifiwatch`, and `init.svc.flash_recovery` stays `running`. Without the `chmod`, `pm install`
+failed with `INSTALL_FAILED_INVALID_APK`. SELinux logs `avc: denied` for kioskwatch's touch stamp
+in `/data/local/tmp`, which permissive mode allows.
+
+Each script was first run from `/data/local/tmp` (wifiwatch with a missing interface and `svc`
+replaced by `log`; kioskwatch with `IDLE=20`, which left Wi-Fi settings after 30 s). After the
+install, across 3 reboots (`adb shell reboot` works on this unit), logcat showed
+`wifiwatch: watching wlan0` and `kioskwatch: watching /dev/input/event5` once boot completed.
+After the last one it showed `navfix: … Success`, with `dumpsys accessibility` listing
+**Home HQ navigation**. The Back/Dashboard bar was drawn above Wi-Fi settings. The kiosk stayed in
+front through the reinstall. Not yet seen: wifiwatch handling a real drop.
+**Undo:** remount `/system` read-write,
+`cat /system/bin/install-recovery.sh.before-watchers > /system/bin/install-recovery.sh`, delete
+`/system/bin/kioskwatch.sh` and `/system/bin/wifiwatch.sh`, remount read-only and reboot.
+
 ### Other differences from the first unit
 
 - **The clock starts in 1969** (`Wed Dec 31 19:00 EST 1969`) until the frame reaches network time.
@@ -264,8 +340,10 @@ reboot on one unit.
   logged "Navigation service listed but not running, rebinding", but Android never bound it.
   Neither re-writing the two settings from ADB nor disabling and re-enabling the component helped;
   `adb install -r` of the kiosk bound it within 3 s every time. The first unit kept it across one
-  reboot. Not resolved; [`scripts/kioskwatch`](../scripts/kioskwatch/README.md) is the root-only
-  fallback.
+  reboot. Setting `device_provisioned` and `user_setup_complete` to `1` did not change this.
+  Worked around by reinstalling the APK at boot
+  ([watchers and navigation at every boot](#watchers-and-navigation-at-every-boot)); the cause is
+  unknown.
 - **Portrait** works with the kiosk's `--es orientation portrait` setting
   ([kiosk README](../dashboard/kiosk/README.md#orientation)); the `mir3da` accelerometer flips it
   the right way up.
@@ -285,6 +363,8 @@ reboot on one unit.
 | `/system/bin/install-recovery.sh`: appended a boot-time stop for the `daemonsu` loop ([details](#stopping-it-at-every-boot-without-touching-boot)); original kept as `install-recovery.sh.bak` | remount `/system` rw, `cat install-recovery.sh.bak > install-recovery.sh` |
 | Kiosk installed, URL saved, `--ez home true`, `--es orientation portrait`, `WRITE_SECURE_SETTINGS` grant, navigation service enabled | as in [the first unit's table](#what-was-set-up-all-owner-approved-writes) |
 | `settings put global stay_on_while_plugged_in 7` (previous value `0`) | `settings put global stay_on_while_plugged_in 0` |
+| `settings put global device_provisioned 1` and `settings put secure user_setup_complete 1` (both were `0`), so the Home key works ([details](#wi-fi-drops-and-does-not-rejoin)) | set both back to `0` |
+| `/system/bin/install-recovery.sh`: appended the navigation fix, `kioskwatch` and `wifiwatch` ([details](#watchers-and-navigation-at-every-boot)); previous version kept as `install-recovery.sh.before-watchers`; `kioskwatch.sh` and `wifiwatch.sh` added to `/system/bin` | see **Undo** in that section |
 
 After a reboot the kiosk came back by itself in portrait, with Frameo and the updater still
 disabled. `com.joyhong.test` was left enabled, as on the first unit.
